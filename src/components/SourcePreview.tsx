@@ -20,9 +20,9 @@ export function SourcePreview({ source, items, selectedIds, disabled, onFile, on
       <div className="panel-heading">
         <div className="flex items-center gap-2">
           <ImageIcon size={17} />
-          <h2>Imagen original</h2>
+          <h2>Original image</h2>
         </div>
-        <span className="eyebrow">01 / ORIGEN</span>
+        <span className="eyebrow">01 / SOURCE</span>
       </div>
       <div className={`source-stage ${source ? 'checkerboard' : ''}`}>
         {source ? (
@@ -35,8 +35,8 @@ export function SourcePreview({ source, items, selectedIds, disabled, onFile, on
           >
             <img
               src={source.url}
-              alt={`Imagen original: ${source.file.name}`}
-              onError={() => onError('No se pudo abrir el PNG. Puede estar incompleto o dañado.')}
+              alt={`Original image: ${source.file.name}`}
+              onError={() => onError('Could not open PNG. It may be incomplete or corrupted.')}
             />
             {showBounds &&
               items.map((item, index) => {
@@ -65,18 +65,18 @@ export function SourcePreview({ source, items, selectedIds, disabled, onFile, on
         <span className="flex min-w-0 items-center gap-2 text-sm text-muted">
           <Scan size={15} />
           {source
-            ? `${source.width.toLocaleString('es')} × ${source.height.toLocaleString('es')} px`
-            : 'La transparencia importa'}
+            ? `${source.width.toLocaleString('en')} × ${source.height.toLocaleString('en')} px`
+            : 'Transparency matters'}
         </span>
         {source && (
           <Button
             className={`bounds-toggle ${showBounds ? 'active' : ''}`}
-            aria-label="Mostrar regiones detectadas"
+            aria-label="Show detected regions"
             aria-pressed={showBounds}
             onPress={() => setShowBounds((value) => !value)}
           >
             <SquareDashed size={15} />
-            <span>Regiones</span>
+            <span>Regions</span>
           </Button>
         )}
       </div>
@@ -84,18 +84,18 @@ export function SourcePreview({ source, items, selectedIds, disabled, onFile, on
         <div className="source-guidance">
           <div className="flex items-center gap-2 text-ink">
             <Layers size={16} />
-            <p className="font-medium">Una imagen. Todos sus elementos.</p>
+            <p className="font-medium">One image. All its elements.</p>
           </div>
           <p>
-            Usa un PNG con espacio transparente entre las piezas. Los elementos que se tocan se
-            extraen juntos.
+            Use a PNG with transparent space between pieces. Elements that touch will be
+            extracted together.
           </p>
           <div className="guidance-tags">
             <span>
-              <Check size={13} /> Transparencia original
+              <Check size={13} /> Original transparency
             </span>
             <span>
-              <Check size={13} /> Sin cambiar la escala
+              <Check size={13} /> No scaling
             </span>
           </div>
         </div>

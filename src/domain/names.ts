@@ -15,7 +15,7 @@ export function normalizedName(name: string): string {
 }
 export function nameError(name: string): string | null {
   const base = normalizedName(name);
-  if (!base) return 'Escribe un nombre.';
+  if (!base) return 'Enter a name.';
   if (
     base === '.' ||
     base === '..' ||
@@ -23,21 +23,21 @@ export function nameError(name: string): string | null {
     /[. ]$/.test(base) ||
     reserved.test(base)
   )
-    return 'Usa un nombre válido, sin / \\ : * ? " < > |.';
-  if (new TextEncoder().encode(base).length > 180) return 'El nombre es demasiado largo.';
+    return 'Use a valid name, without / \\ : * ? " < > |.';
+  if (new TextEncoder().encode(base).length > 180) return 'Name is too long.';
   return null;
 }
 export function validateNames(names: string[]): (string | null)[] {
   const counts = new Map<string, number>();
   for (const name of names) {
-    const key = normalizedName(name).toLocaleLowerCase('es');
+    const key = normalizedName(name).toLocaleLowerCase('en');
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return names.map(
     (name) =>
       nameError(name) ??
-      ((counts.get(normalizedName(name).toLocaleLowerCase('es')) ?? 0) > 1
-        ? 'Este nombre está repetido.'
+      ((counts.get(normalizedName(name).toLocaleLowerCase('en')) ?? 0) > 1
+        ? 'This name is duplicated.'
         : null),
   );
 }
@@ -47,5 +47,5 @@ export function safeStem(filename: string): string {
     .join('')
     .replace(/[. ]+$/g, '')
     .slice(0, 60);
-  return !stem || reserved.test(stem) ? 'imagen' : stem;
+  return !stem || reserved.test(stem) ? 'image' : stem;
 }

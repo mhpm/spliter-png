@@ -35,14 +35,14 @@ export default function App({ services }: { services: Services }) {
   const step = state.items.length ? 3 : state.source ? 2 : 1;
   const fileSize = state.source
     ? state.source.file.size < 1024 * 1024
-      ? `${Math.max(0.1, state.source.file.size / 1024).toLocaleString('es', { maximumFractionDigits: 1 })} KB`
-      : `${(state.source.file.size / 1024 / 1024).toLocaleString('es', { maximumFractionDigits: 2 })} MB`
+      ? `${Math.max(0.1, state.source.file.size / 1024).toLocaleString('en', { maximumFractionDigits: 1 })} KB`
+      : `${(state.source.file.size / 1024 / 1024).toLocaleString('en', { maximumFractionDigits: 2 })} MB`
     : '';
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <a href="/" className="brand" aria-label="Spliter, inicio">
+        <a href="/" className="brand" aria-label="Spliter, home">
           <span className="brand-mark">
             <Crop size={23} strokeWidth={1.8} />
           </span>
@@ -51,21 +51,21 @@ export default function App({ services }: { services: Services }) {
           </span>
         </a>
         <div className="header-divider" />
-        <span className="header-description">Tu PNG, pieza por pieza</span>
+        <span className="header-description">Your PNG, piece by piece</span>
         <span className="local-badge">
           <LockKeyhole size={13} />
-          <span>100% en tu navegador</span>
+          <span>100% in your browser</span>
         </span>
       </header>
       <main>
         <div className="workspace-heading">
           <div>
-            <div className="eyebrow mb-2 text-accent">ESPACIO DE TRABAJO</div>
-            <h1>Extractor de elementos</h1>
-            <p>Separa, nombra y descarga las piezas de tu imagen.</p>
+            <div className="eyebrow mb-2 text-accent">WORKSPACE</div>
+            <h1>Element Extractor</h1>
+            <p>Separate, name, and download individual pieces from your image.</p>
           </div>
-          <nav className="steps" aria-label="Progreso">
-            {['Carga', 'Extrae', 'Descarga'].map((label, index) => (
+          <nav className="steps" aria-label="Progress">
+            {['Upload', 'Extract', 'Download'].map((label, index) => (
               <div
                 key={label}
                 className={`step ${step >= index + 1 ? 'current' : ''}`}
@@ -88,15 +88,15 @@ export default function App({ services }: { services: Services }) {
           <div className="notice warning-notice" role="status">
             <AlertCircle size={18} />
             <p>
-              Este PNG no tiene transparencia. Un fondo opaco conecta todos los elementos; utiliza
-              una imagen con fondo transparente para separarlos.
+              This PNG has no transparency. An opaque background connects all elements; use
+              an image with a transparent background to separate them.
             </p>
           </div>
         )}
         {state.dirty && (
           <div className="notice info-notice" role="status">
             <AlertCircle size={18} />
-            <p>Hay ajustes pendientes. Pulsa “Volver a extraer” para actualizar los recortes.</p>
+            <p>Pending settings. Click “Re-extract” to update cutouts.</p>
           </div>
         )}
         {busy && (
@@ -104,9 +104,9 @@ export default function App({ services }: { services: Services }) {
             <LoaderCircle size={18} className="animate-spin" />
             <span>
               {state.status === 'exporting'
-                ? 'Preparando tu ZIP…'
+                ? 'Preparing your ZIP…'
                 : state.status === 'loading'
-                  ? 'Leyendo el PNG…'
+                  ? 'Reading PNG…'
                   : state.progress.message}
             </span>
             {state.status === 'processing' && (
@@ -114,20 +114,20 @@ export default function App({ services }: { services: Services }) {
                 <progress
                   max={100}
                   value={state.progress.percent}
-                  aria-label="Progreso de extracción"
+                  aria-label="Extraction progress"
                 />
                 <span className="tabular-nums text-xs">{state.progress.percent}%</span>
               </>
             )}
             <Button onPress={cancel} className="cancel-button">
-              <X size={13} /> Cancelar
+              <X size={13} /> Cancel
             </Button>
           </div>
         )}
         <div className="workspace-grid">
           <aside className="sidebar">
             <div className="sidebar-file">
-              <p className="eyebrow mb-4">TU ARCHIVO</p>
+              <p className="eyebrow mb-4">YOUR FILE</p>
               {state.source ? (
                 <>
                   <div className="selected-file">
@@ -145,7 +145,7 @@ export default function App({ services }: { services: Services }) {
               ) : (
                 <div className="file-placeholder">
                   <FileImage size={19} />
-                  <span>Ningún archivo seleccionado</span>
+                  <span>No file selected</span>
                 </div>
               )}
             </div>
@@ -183,9 +183,9 @@ export default function App({ services }: { services: Services }) {
           />
         </div>
         <footer className="workspace-footer">
-          <span>Hecho para imágenes con fondo transparente.</span>
+          <span>Designed for images with transparent backgrounds.</span>
           <span>
-            PNG → PNG <span className="mx-2 text-line">/</span> Hasta 16 megapíxeles
+            PNG → PNG <span className="mx-2 text-line">/</span> Up to 16 megapixels
           </span>
         </footer>
       </main>

@@ -79,7 +79,7 @@ function reducer(state: State, action: Action): State {
         status: action.status,
         error: null,
         downloaded: false,
-        progress: { percent: 0, message: 'Preparando…' },
+        progress: { percent: 0, message: 'Preparing…' },
       };
     case 'options':
       return {
@@ -187,7 +187,7 @@ export function useSplitter(services: Services) {
     else
       dispatch({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Ocurrió un error. Vuelve a intentarlo.',
+        message: error instanceof Error ? error.message : 'An error occurred. Please try again.',
       });
   }
 
@@ -243,7 +243,7 @@ export function useSplitter(services: Services) {
     try {
       const blob = await services.archive.create(selectedItems, signal);
       if (id !== operation.current) return;
-      services.download(blob, `${safeStem(state.source.file.name)}_elementos.zip`);
+      services.download(blob, `${safeStem(state.source.file.name)}_elements.zip`);
       dispatch({ type: 'downloaded' });
     } catch (error) {
       fail(error, id);
@@ -253,7 +253,7 @@ export function useSplitter(services: Services) {
   function downloadSingle(id: number) {
     const item = state.items.find((item) => item.id === id);
     if (!item) return;
-    const name = normalizedName(item.name) || `elemento_${id}`;
+    const name = normalizedName(item.name) || `element_${id}`;
     services.download(item.blob, `${name}.png`);
   }
 

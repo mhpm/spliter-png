@@ -14,7 +14,7 @@ export const workerExtractor: Extractor = {
       };
       const abort = () => {
         cleanup();
-        reject(new DOMException('Proceso cancelado', 'AbortError'));
+        reject(new DOMException('Processing cancelled', 'AbortError'));
       };
       signal.addEventListener('abort', abort, { once: true });
       worker.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
@@ -27,11 +27,11 @@ export const workerExtractor: Extractor = {
       };
       worker.onerror = () => {
         cleanup();
-        reject(new Error('No se pudo procesar la imagen. Prueba con un PNG más pequeño.'));
+        reject(new Error('Could not process the image. Try with a smaller PNG.'));
       };
       worker.onmessageerror = () => {
         cleanup();
-        reject(new Error('No se pudo recuperar el resultado.'));
+        reject(new Error('Could not retrieve the result.'));
       };
       worker.postMessage({ file, options });
     });

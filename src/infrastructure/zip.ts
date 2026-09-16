@@ -4,9 +4,9 @@ import { normalizedName, validateNames } from '../domain/names';
 export const zipWriter: ArchiveWriter = {
   async create(entries, signal) {
     signal.throwIfAborted();
-    if (!entries.length) throw new Error('No hay imágenes para descargar.');
+    if (!entries.length) throw new Error('No images to download.');
     if (validateNames(entries.map((entry) => entry.name)).some(Boolean))
-      throw new Error('Corrige los nombres antes de descargar.');
+      throw new Error('Fix names before downloading.');
     const { zip } = await import('fflate');
     const files: Record<string, Uint8Array> = Object.create(null);
     for (const entry of entries) {
@@ -23,7 +23,7 @@ export const zipWriter: ArchiveWriter = {
       });
       const abort = () => {
         cancel();
-        reject(new DOMException('Descarga cancelada', 'AbortError'));
+        reject(new DOMException('Download cancelled', 'AbortError'));
       };
       signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) abort();

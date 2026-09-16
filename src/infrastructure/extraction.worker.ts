@@ -20,17 +20,17 @@ self.onmessage = async (event: MessageEvent<{ file: File; options: ExtractionOpt
   try {
     const { file, options } = event.data;
     const dimensions = await inspectPng(file);
-    send({ type: 'progress', progress: { percent: 4, message: 'Leyendo la imagen…' } });
+    send({ type: 'progress', progress: { percent: 4, message: 'Reading image…' } });
     if (typeof OffscreenCanvas === 'undefined')
       throw new Error(
-        'Tu navegador no permite procesar esta imagen en segundo plano. Usa una versión reciente de Chrome, Edge, Firefox o Safari.',
+        'Your browser does not support background processing. Please use a recent version of Chrome, Edge, Firefox, or Safari.',
       );
     bitmap = await createImageBitmap(file);
     if (bitmap.width !== dimensions.width || bitmap.height !== dimensions.height)
-      throw new Error('Las dimensiones del PNG no coinciden con su contenido.');
+      throw new Error('PNG dimensions do not match its content.');
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) throw new Error('No se pudo preparar el procesamiento de la imagen.');
+    if (!context) throw new Error('Could not initialize image processing.');
     context.drawImage(bitmap, 0, 0);
     bitmap.close();
     bitmap = undefined;
@@ -45,13 +45,13 @@ self.onmessage = async (event: MessageEvent<{ file: File; options: ExtractionOpt
     const regions = detectRegions(image, options, (fraction) =>
       send({
         type: 'progress',
-        progress: { percent: 10 + Math.round(fraction * 45), message: 'Detectando elementos…' },
+        progress: { percent: 10 + Math.round(fraction * 45), message: 'Detecting elements…' },
       }),
     );
     const images: ExtractedImage[] = [];
     const output = new OffscreenCanvas(1, 1);
     const outputContext = output.getContext('2d');
-    if (!outputContext) throw new Error('No se pudieron crear los recortes.');
+    if (!outputContext) throw new Error('Could not create cutouts.');
     for (let index = 0; index < regions.length; index++) {
       const region = regions[index];
       const crop = isolateRegion(image, region, options.padding);
@@ -79,7 +79,7 @@ self.onmessage = async (event: MessageEvent<{ file: File; options: ExtractionOpt
           type: 'progress',
           progress: {
             percent: 55 + Math.round(((index + 1) / regions.length) * 45),
-            message: `Preparando recortes: ${index + 1} de ${regions.length}`,
+            message: `Preparing cutouts: ${index + 1} of ${regions.length}`,
           },
         });
     }
@@ -88,7 +88,7 @@ self.onmessage = async (event: MessageEvent<{ file: File; options: ExtractionOpt
   } catch (error) {
     send({
       type: 'error',
-      message: error instanceof Error ? error.message : 'No se pudo procesar el PNG.',
+      message: error instanceof Error ? error.message : 'Could not process the PNG.',
     });
   } finally {
     bitmap?.close();

@@ -20,8 +20,8 @@ export function UploadZone({ onFile, onError, disabled, compact = false }: Props
     onDropRejected: (files) =>
       onError(
         files.some((file) => file.errors.some((error) => error.code === 'file-too-large'))
-          ? 'El PNG supera los 25 MB.'
-          : 'Elige un solo archivo PNG de hasta 25 MB.',
+          ? 'The PNG exceeds 25 MB.'
+          : 'Choose a single PNG file up to 25 MB.',
       ),
   });
 
@@ -29,28 +29,28 @@ export function UploadZone({ onFile, onError, disabled, compact = false }: Props
     <div
       {...getRootProps({
         className: `upload-zone ${compact ? 'compact' : ''} ${isDragActive ? 'drag-active' : ''}`,
-        'aria-label': 'Seleccionar imagen PNG',
+        'aria-label': 'Select PNG image',
         role: 'button',
       })}
     >
-      <input {...getInputProps({ 'aria-label': 'Archivo PNG' })} />
+      <input {...getInputProps({ 'aria-label': 'PNG file' })} />
       <div className="upload-icon">
         {compact ? <Upload size={19} /> : <FileImage size={30} strokeWidth={1.5} />}
       </div>
       <div>
         <p className="font-semibold text-ink">
           {isDragActive
-            ? 'Suelta tu imagen aquí'
+            ? 'Drop your image here'
             : compact
-              ? 'Cambiar imagen'
-              : 'Arrastra tu PNG aquí'}
+              ? 'Change image'
+              : 'Drag your PNG here'}
         </p>
-        {!compact && <p className="mt-2 text-sm text-muted">o haz clic para buscar en tu equipo</p>}
+        {!compact && <p className="mt-2 text-sm text-muted">or click to browse your computer</p>}
       </div>
       {compact ? (
         <ArrowUpRight size={17} className="ml-auto text-muted" />
       ) : (
-        <span className="upload-hint">PNG con transparencia · Hasta 25 MB</span>
+        <span className="upload-hint">Transparent PNG · Up to 25 MB</span>
       )}
     </div>
   );

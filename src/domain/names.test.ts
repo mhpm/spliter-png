@@ -2,9 +2,9 @@ import { expect, it } from 'vitest';
 import { normalizedName, safeStem, validateNames } from './names';
 
 it('detects collisions across case, PNG suffix and Unicode normalization', () => {
-  expect(validateNames(['Hoja', 'hoja.PNG'])).toEqual([
-    'Este nombre está repetido.',
-    'Este nombre está repetido.',
+  expect(validateNames(['Leaf', 'leaf.PNG'])).toEqual([
+    'This name is duplicated.',
+    'This name is duplicated.',
   ]);
   expect(validateNames(['café', 'cafe\u0301']).every(Boolean)).toBe(true);
 });
@@ -21,12 +21,12 @@ it('rejects paths, empty names and reserved platform names', () => {
       'x'.repeat(181),
     ]).every(Boolean),
   ).toBe(true);
-  expect(validateNames(['flor azul', 'hoja-01', 'árbol', 'constructor'])).toEqual([
+  expect(validateNames(['blue flower', 'leaf-01', 'tree', 'builder'])).toEqual([
     null,
     null,
     null,
     null,
   ]);
-  expect(normalizedName(' árbol.png ')).toBe('árbol');
-  expect(safeStem('NUL.png')).toBe('imagen');
+  expect(normalizedName(' tree.png ')).toBe('tree');
+  expect(safeStem('NUL.png')).toBe('image');
 });

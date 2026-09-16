@@ -58,11 +58,11 @@ function NumericSetting({
         <p>{description}</p>
       </div>
       <Group className="number-group">
-        <Button slot="decrement" aria-label={`Reducir ${label.toLowerCase()}`}>
+        <Button slot="decrement" aria-label={`Decrease ${label.toLowerCase()}`}>
           <Minus size={13} />
         </Button>
         <Input />
-        <Button slot="increment" aria-label={`Aumentar ${label.toLowerCase()}`}>
+        <Button slot="increment" aria-label={`Increase ${label.toLowerCase()}`}>
           <Plus size={13} />
         </Button>
       </Group>
@@ -79,13 +79,13 @@ export function SettingsPanel({
   onExtract,
 }: Props) {
   return (
-    <section className="settings-panel" aria-label="Ajustes de extracción">
+    <section className="settings-panel" aria-label="Extraction settings">
       <div className="flex items-center gap-2.5">
         <SlidersHorizontal size={17} />
-        <h2 className="font-semibold">Ajustes de extracción</h2>
+        <h2 className="font-semibold">Extraction settings</h2>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-muted">
-        Separamos los elementos a partir de la transparencia de tu PNG.
+        We separate elements based on your PNG's transparency.
       </p>
       <fieldset disabled={disabled} className="mt-7 min-w-0">
         <Slider
@@ -98,7 +98,7 @@ export function SettingsPanel({
           className="threshold-slider"
         >
           <div className="flex items-center justify-between">
-            <Label>Umbral de transparencia</Label>
+            <Label>Transparency threshold</Label>
             <SliderOutput className="value-badge" />
           </div>
           <SliderTrack>
@@ -114,40 +114,40 @@ export function SettingsPanel({
             )}
           </SliderTrack>
           <div className="flex justify-between text-xs text-muted">
-            <span>Más detalle</span>
-            <span>Menos ruido</span>
+            <span>More detail</span>
+            <span>Less noise</span>
           </div>
         </Slider>
         {options.alphaThreshold === 0 && (
           <p className="mt-3 text-xs text-amber-800">
-            Con 0 se incluyen incluso los píxeles transparentes: toda la imagen será un elemento.
+            0 includes fully transparent pixels: the whole image will become a single element.
           </p>
         )}
         <details className="advanced-settings">
           <summary>
-            Más ajustes
+            More settings
             <ChevronDown size={15} />
           </summary>
           <div className="mt-4 space-y-5">
             <NumericSetting
-              label="Área mínima"
-              description="Píxeles visibles por elemento"
+              label="Minimum area"
+              description="Visible pixels per element"
               value={options.minArea}
               min={1}
               max={16777216}
               onChange={(minArea) => onChange({ ...options, minArea })}
             />
             <NumericSetting
-              label="Tamaño mínimo"
-              description="Ancho y alto, en píxeles"
+              label="Minimum size"
+              description="Width and height, in pixels"
               value={options.minSize}
               min={1}
               max={8192}
               onChange={(minSize) => onChange({ ...options, minSize })}
             />
             <NumericSetting
-              label="Margen"
-              description="Espacio alrededor del recorte"
+              label="Padding"
+              description="Space around cutout"
               value={options.padding}
               min={0}
               max={256}
@@ -158,7 +158,7 @@ export function SettingsPanel({
               onPress={() => onChange({ ...DEFAULT_OPTIONS })}
               isDisabled={disabled}
             >
-              <RotateCcw size={13} /> Restablecer valores
+              <RotateCcw size={13} /> Reset settings
             </Button>
           </div>
         </details>
@@ -169,18 +169,18 @@ export function SettingsPanel({
         onPress={onExtract}
       >
         <ScanLine size={17} />
-        {hasResults ? 'Volver a extraer' : 'Extraer elementos'}
+        {hasResults ? 'Re-extract' : 'Extract elements'}
       </Button>
       {hasResults && (
         <p className="mt-2 text-xs leading-relaxed text-muted">
-          Volver a extraer reinicia los nombres.
+          Re-extracting resets element names.
         </p>
       )}
       <div className="privacy-note">
         <ShieldCheck size={19} />
         <div>
-          <p>Tu imagen se queda contigo</p>
-          <span>Todo se procesa en tu navegador. No subimos tus archivos a un servidor.</span>
+          <p>Your image stays with you</p>
+          <span>Everything is processed in your browser. Your files are never uploaded to a server.</span>
         </div>
       </div>
     </section>

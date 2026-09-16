@@ -31,11 +31,11 @@ function ImageCard({
         <DialogTrigger>
           <Button
             className="image-thumbnail checkerboard"
-            aria-label={`Ampliar elemento ${index + 1}`}
+            aria-label={`Enlarge element ${index + 1}`}
           >
             <span className="image-index">{String(index + 1).padStart(2, '0')}</span>
-            <img src={item.url} alt={`Recorte ${index + 1}`} loading="lazy" />
-            <span className="expand-icon" title="Ampliar">
+            <img src={item.url} alt={`Cutout ${index + 1}`} loading="lazy" />
+            <span className="expand-icon" title="Enlarge">
               <Expand size={14} />
             </span>
           </Button>
@@ -45,27 +45,27 @@ function ImageCard({
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <Heading slot="title" className="truncate font-semibold">
-                      {item.name || `Elemento ${index + 1}`}
+                      {item.name || `Element ${index + 1}`}
                     </Heading>
                     <p className="mt-1 text-sm text-muted">
-                      {item.width} × {item.height} px · PNG transparente
+                      {item.width} × {item.height} px · Transparent PNG
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
                       className="icon-button"
                       onPress={() => onDownloadSingle(item.id)}
-                      aria-label={`Descargar PNG del elemento ${index + 1}`}
+                      aria-label={`Download PNG for element ${index + 1}`}
                     >
                       <ArrowDownToLine size={18} />
                     </Button>
-                    <Button slot="close" className="icon-button" aria-label="Cerrar vista previa">
+                    <Button slot="close" className="icon-button" aria-label="Close preview">
                       <X size={20} />
                     </Button>
                   </div>
                 </div>
                 <div className="modal-image checkerboard">
-                  <img src={item.url} alt={`Vista ampliada del elemento ${index + 1}`} />
+                  <img src={item.url} alt={`Enlarged view of element ${index + 1}`} />
                 </div>
               </Dialog>
             </Modal>
@@ -81,11 +81,11 @@ function ImageCard({
           }}
           aria-label={
             selected
-              ? `Deseleccionar elemento ${index + 1}`
-              : `Seleccionar elemento ${index + 1}`
+              ? `Deselect element ${index + 1}`
+              : `Select element ${index + 1}`
           }
           aria-pressed={selected}
-          title={selected ? 'Excluir de la descarga' : 'Incluir en la descarga'}
+          title={selected ? 'Exclude from download' : 'Include in download'}
         >
           <span className="select-check-icon">
             {selected && <Check size={12} strokeWidth={3.2} />}
@@ -99,8 +99,8 @@ function ImageCard({
             e.stopPropagation();
             onDownloadSingle(item.id);
           }}
-          aria-label={`Descargar PNG del elemento ${index + 1}`}
-          title="Descargar este PNG"
+          aria-label={`Download PNG for element ${index + 1}`}
+          title="Download this PNG"
         >
           <ArrowDownToLine size={13} />
         </button>
@@ -108,7 +108,7 @@ function ImageCard({
 
       <div className="image-card-info">
         <label htmlFor={inputId} className="sr-only">
-          Nombre del elemento {index + 1}
+          Element {index + 1} name
         </label>
         <div className="filename-field">
           <input
@@ -183,11 +183,11 @@ export function ResultsPanel({
   });
 
   return (
-    <section className="results-panel panel" aria-label="Elementos extraídos">
+    <section className="results-panel panel" aria-label="Extracted elements">
       <div className="panel-heading">
         <div className="flex items-center gap-2">
           <Grid2X2 size={17} />
-          <h2>Elementos</h2>
+          <h2>Elements</h2>
           <span className="count-badge">
             {items.length > 0
               ? selectedCount === items.length
@@ -196,20 +196,20 @@ export function ResultsPanel({
               : 0}
           </span>
         </div>
-        <span className="eyebrow">02 / RESULTADO</span>
+        <span className="eyebrow">02 / RESULT</span>
       </div>
       {items.length ? (
         <>
           <div className="results-intro">
             <div className="flex flex-col gap-2.5">
               <div>
-                <p>Dale un nombre a cada pieza.</p>
-                <span>Haz clic en una imagen para ampliarla.</span>
+                <p>Name each piece.</p>
+                <span>Click an image to enlarge it.</span>
               </div>
               <div className="selection-toolbar">
                 <span className="selection-status">
                   <strong className="font-semibold text-ink">{selectedCount}</strong>{' '}
-                  <span className="text-muted">de {items.length} seleccionados</span>
+                  <span className="text-muted">of {items.length} selected</span>
                 </span>
                 <div className="selection-actions">
                   <button
@@ -217,9 +217,9 @@ export function ResultsPanel({
                     className="selection-action-btn"
                     onClick={onSelectAll}
                     disabled={allSelected || disabled}
-                    aria-label="Seleccionar todos los elementos"
+                    aria-label="Select all elements"
                   >
-                    Seleccionar todos
+                    Select all
                   </button>
                   <span className="selection-divider" aria-hidden="true">
                     ·
@@ -229,9 +229,9 @@ export function ResultsPanel({
                     className="selection-action-btn"
                     onClick={onDeselectAll}
                     disabled={noneSelected || disabled}
-                    aria-label="Deseleccionar todos los elementos"
+                    aria-label="Deselect all elements"
                   >
-                    Deseleccionar todos
+                    Deselect all
                   </button>
                 </div>
               </div>
@@ -265,11 +265,11 @@ export function ResultsPanel({
           <div className="empty-icon">
             <PackageOpen size={33} strokeWidth={1.3} />
           </div>
-          <h3>{completed ? 'No encontramos elementos' : 'Aquí empieza cada pieza'}</h3>
+          <h3>{completed ? 'No elements found' : 'Your pieces will appear here'}</h3>
           <p>
             {completed
-              ? 'Reduce el umbral, el área o el tamaño mínimo y vuelve a extraer.'
-              : 'Carga tu PNG y pulsa “Extraer elementos” para revisar y nombrar cada recorte.'}
+              ? 'Reduce the threshold, area, or minimum size and extract again.'
+              : 'Upload your PNG and click “Extract elements” to review and name each cutout.'}
           </p>
         </div>
       )}
@@ -278,11 +278,11 @@ export function ResultsPanel({
           <span>
             {items.length
               ? selectedCount === items.length
-                ? `${items.length} ${items.length === 1 ? 'imagen lista' : 'imágenes listas'}`
+                ? `${items.length} ${items.length === 1 ? 'image ready' : 'images ready'}`
                 : selectedCount === 0
-                  ? 'Ninguna imagen seleccionada'
-                  : `${selectedCount} de ${items.length} ${selectedCount === 1 ? 'seleccionada' : 'seleccionadas'}`
-              : 'Todo en un solo archivo'}
+                  ? 'No images selected'
+                  : `${selectedCount} of ${items.length} ${selectedCount === 1 ? 'image selected' : 'images selected'}`
+              : 'All in a single file'}
           </span>
           <span className="text-muted">.ZIP</span>
         </div>
@@ -292,7 +292,7 @@ export function ResultsPanel({
           onPress={onExport}
         >
           <ArrowDownToLine size={17} />
-          {exporting ? 'Preparando ZIP…' : 'Descargar ZIP'}
+          {exporting ? 'Preparing ZIP…' : 'Download ZIP'}
           {selectedCount > 0 && <span className="download-count">{selectedCount}</span>}
         </Button>
         <p
@@ -300,17 +300,17 @@ export function ResultsPanel({
           role="status"
         >
           {hasErrors ? (
-            'Corrige los nombres marcados para descargar.'
+            'Fix highlighted names before downloading.'
           ) : dirty ? (
-            'Aplica los nuevos ajustes antes de descargar.'
+            'Apply pending settings before downloading.'
           ) : selectedCount === 0 && items.length > 0 ? (
-            'Selecciona al menos un elemento para descargar.'
+            'Select at least one element to download.'
           ) : downloaded ? (
             <>
-              <Check size={13} /> Tu ZIP está listo. Revisa tus descargas.
+              <Check size={13} /> Your ZIP is ready. Check your downloads.
             </>
           ) : (
-            'PNG individuales · Transparencia conservada'
+            'Individual PNGs · Transparency preserved'
           )}
         </p>
       </div>
