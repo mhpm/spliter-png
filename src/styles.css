@@ -297,6 +297,12 @@
     border: 1px solid #238a61;
     background: #238a6108;
     pointer-events: none;
+    transition: opacity 0.2s, border-color 0.2s;
+  }
+  .region-bound.is-unselected {
+    border: 1px dashed #98a5ad99;
+    background: #98a5ad0a;
+    opacity: 0.55;
   }
   .region-bound > span {
     position: absolute;
@@ -308,6 +314,10 @@
     padding: 1px 4px;
     font-size: 10px;
     line-height: 15px;
+    transition: background-color 0.2s;
+  }
+  .region-bound.is-unselected > span {
+    background: #7a8890;
   }
   .upload-zone {
     @apply flex min-h-[290px] w-full flex-col items-center justify-center rounded-xl border border-dashed border-[#c8d9d0] bg-[#fafcfb] p-6 text-center transition-colors hover:border-accent hover:bg-[#f2f8f4];
@@ -381,6 +391,21 @@
   .results-intro > span {
     @apply mt-0.5 block text-xs text-muted;
   }
+  .selection-toolbar {
+    @apply mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-line bg-[#f8faf9] px-3 py-1.5 text-xs;
+  }
+  .selection-status {
+    @apply text-xs;
+  }
+  .selection-actions {
+    @apply flex items-center gap-1.5;
+  }
+  .selection-action-btn {
+    @apply rounded px-1.5 py-0.5 text-xs font-medium text-[#246b4e] transition-colors hover:bg-[#e4efe9] hover:text-accent disabled:pointer-events-none disabled:text-muted/60 disabled:opacity-50;
+  }
+  .selection-divider {
+    @apply text-[#cfd7d9];
+  }
   .results-grid {
     @apply grid grid-cols-2 gap-3 px-4 pb-5;
     max-height: clamp(270px, calc(100dvh - 540px), 580px);
@@ -389,9 +414,45 @@
     scrollbar-width: thin;
   }
   .image-card {
-    @apply min-w-0 overflow-hidden rounded-lg border border-line;
+    @apply min-w-0 overflow-hidden rounded-lg border border-line transition-all;
     content-visibility: auto;
     contain-intrinsic-size: auto 195px;
+  }
+  .image-card.is-selected {
+    @apply border-[#91cbb2] bg-white shadow-xs;
+  }
+  .image-card.is-unselected {
+    @apply border-[#e3e8ea] bg-[#fafbfb];
+  }
+  .image-card.is-unselected .image-thumbnail img {
+    opacity: 0.45;
+    filter: grayscale(35%);
+    transition: opacity 0.2s, filter 0.2s;
+  }
+  .image-card.is-unselected:hover .image-thumbnail img {
+    opacity: 0.8;
+    filter: grayscale(10%);
+  }
+  .image-card-top {
+    @apply relative;
+  }
+  .card-select-btn {
+    @apply absolute right-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-[#c5cfd4] bg-white/95 text-transparent shadow-xs transition-all hover:scale-105 hover:border-accent hover:bg-white;
+  }
+  .card-select-btn.is-selected {
+    @apply border-accent bg-accent text-white shadow-sm;
+  }
+  .card-select-btn:focus-visible {
+    @apply outline-2 outline-accent outline-offset-1;
+  }
+  .select-check-icon {
+    @apply flex items-center justify-center;
+  }
+  .card-download-btn {
+    @apply absolute bottom-2 left-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-line bg-white/95 text-muted shadow-xs transition-all hover:scale-105 hover:border-accent hover:text-accent;
+  }
+  .card-download-btn:focus-visible {
+    @apply outline-2 outline-accent outline-offset-1;
   }
   .image-thumbnail {
     @apply relative flex h-[125px] w-full items-center justify-center p-5;

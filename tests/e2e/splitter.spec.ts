@@ -93,3 +93,44 @@ test('16 megapixel input can be cancelled, retried and replaced without stale re
     page.getByRole('textbox', { name: 'Nombre del elemento 1', exact: true }),
   ).toHaveValue('sample_001');
 });
+
+test('user can select and deselect elements to download only chosen pieces', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Archivo PNG').setInputFiles('tests/fixtures/sample.png');
+  await page.getByRole('button', { name: 'Extraer elementos', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Nombre del elemento' })).toHaveCount(6);
+
+  // All 6 items start selected
+  await expect(page.getByText('6 de 6 seleccionados')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Descargar ZIP/ })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /Descargar ZIP/ })).toContainText('6');
+
+  // Deselect all
+  await page.getByRole('button', { name: 'Deseleccionar todos' }).click();
+  await expect(page.getByText('0 de 6 seleccionados')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Descargar ZIP/ })).toBeDisabled();
+  await expect(page.getByText('Selecciona al menos un elemento para descargar.')).toBeVisible();
+
+  // Select only item 1 and item 3
+  await page.getByRole('button', { name: 'Seleccionar elemento 1' }).click();
+  await page.getByRole('button', { name: 'Seleccionar elemento 3' }).click();
+  await expect(page.getByText('2 de 6 seleccionados')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Descargar ZIP/ })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /Descargar ZIP/ })).toContainText('2');
+
+  // Download ZIP and verify only the 2 selected items are present
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Descargar ZIP/ }).click();
+  const download = await downloadEvent;
+  const files = unzipSync(await readFile((await download.path())!));
+  expect(Object.keys(files)).toHaveLength(2);
+  expect(files['sample_001.png']).toBeDefined();
+  expect(files['sample_003.png']).toBeDefined();
+  expect(files['sample_002.png']).toBeUndefined();
+
+  // Test individual PNG quick download button on element 2
+  const singleDownloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Descargar PNG del elemento 2' }).click();
+  const singleDownload = await singleDownloadEvent;
+  expect(singleDownload.suggestedFilename()).toBe('sample_002.png');
+});

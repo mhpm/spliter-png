@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef } from 'react';
 import type { ArchiveWriter, Extractor } from './ports';
 import { DEFAULT_OPTIONS } from '../domain/model';
 import type { ExtractedImage, ExtractionOptions, Progress } from '../domain/model';
-import { safeStem } from '../domain/names';
+import { safeStem, normalizedName } from '../domain/names';
 
 export interface SourceImage {
   file: File;
@@ -24,6 +24,7 @@ type Status = 'idle' | 'loading' | 'ready' | 'processing' | 'complete' | 'export
 interface State {
   source: SourceImage | null;
   items: ImageItem[];
+  selectedIds: Set<number>;
   options: ExtractionOptions;
   status: Status;
   progress: Progress;
@@ -35,6 +36,7 @@ interface State {
 const initialState: State = {
   source: null,
   items: [],
+  selectedIds: new Set<number>(),
   options: { ...DEFAULT_OPTIONS },
   status: 'idle',
   progress: { percent: 0, message: '' },
@@ -50,6 +52,9 @@ type Action =
   | { type: 'progress'; progress: Progress }
   | { type: 'result'; items: ImageItem[]; opaque: boolean }
   | { type: 'rename'; id: number; name: string }
+  | { type: 'toggleSelect'; id: number }
+  | { type: 'selectAll' }
+  | { type: 'deselectAll' }
   | { type: 'error'; message: string }
   | { type: 'cancel' }
   | { type: 'downloaded' };
@@ -61,6 +66,7 @@ function reducer(state: State, action: Action): State {
         ...state,
         source: action.source,
         items: [],
+        selectedIds: new Set(),
         error: null,
         opaque: false,
         dirty: false,
@@ -87,6 +93,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         items: action.items,
+        selectedIds: new Set(action.items.map((item) => item.id)),
         opaque: action.opaque,
         status: 'complete',
         error: null,
@@ -99,6 +106,31 @@ function reducer(state: State, action: Action): State {
         items: state.items.map((item) =>
           item.id === action.id ? { ...item, name: action.name } : item,
         ),
+      };
+    case 'toggleSelect': {
+      const nextSelected = new Set(state.selectedIds);
+      if (nextSelected.has(action.id)) {
+        nextSelected.delete(action.id);
+      } else {
+        nextSelected.add(action.id);
+      }
+      return {
+        ...state,
+        selectedIds: nextSelected,
+        downloaded: false,
+      };
+    }
+    case 'selectAll':
+      return {
+        ...state,
+        selectedIds: new Set(state.items.map((item) => item.id)),
+        downloaded: false,
+      };
+    case 'deselectAll':
+      return {
+        ...state,
+        selectedIds: new Set(),
+        downloaded: false,
       };
     case 'error':
       return {
@@ -204,17 +236,25 @@ export function useSplitter(services: Services) {
   }
 
   async function exportZip() {
-    if (!state.items.length || !state.source) return;
+    const selectedItems = state.items.filter((item) => state.selectedIds.has(item.id));
+    if (!selectedItems.length || !state.source) return;
     const { id, signal } = begin();
     dispatch({ type: 'status', status: 'exporting' });
     try {
-      const blob = await services.archive.create(state.items, signal);
+      const blob = await services.archive.create(selectedItems, signal);
       if (id !== operation.current) return;
       services.download(blob, `${safeStem(state.source.file.name)}_elementos.zip`);
       dispatch({ type: 'downloaded' });
     } catch (error) {
       fail(error, id);
     }
+  }
+
+  function downloadSingle(id: number) {
+    const item = state.items.find((item) => item.id === id);
+    if (!item) return;
+    const name = normalizedName(item.name) || `elemento_${id}`;
+    services.download(item.blob, `${name}.png`);
   }
 
   function cancel() {
@@ -227,7 +267,11 @@ export function useSplitter(services: Services) {
     load,
     extract,
     exportZip,
+    downloadSingle,
     cancel,
+    toggleSelect: (id: number) => dispatch({ type: 'toggleSelect', id }),
+    selectAll: () => dispatch({ type: 'selectAll' }),
+    deselectAll: () => dispatch({ type: 'deselectAll' }),
     setOptions: (options: ExtractionOptions) => dispatch({ type: 'options', options }),
     rename: (id: number, name: string) => dispatch({ type: 'rename', id, name }),
     reportError: (message: string) => dispatch({ type: 'error', message }),

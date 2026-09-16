@@ -17,8 +17,20 @@ import { SourcePreview } from './components/SourcePreview';
 import { ResultsPanel } from './components/ResultsPanel';
 
 export default function App({ services }: { services: Services }) {
-  const { state, load, extract, exportZip, cancel, setOptions, rename, reportError } =
-    useSplitter(services);
+  const {
+    state,
+    load,
+    extract,
+    exportZip,
+    downloadSingle,
+    cancel,
+    toggleSelect,
+    selectAll,
+    deselectAll,
+    setOptions,
+    rename,
+    reportError,
+  } = useSplitter(services);
   const busy = ['loading', 'processing', 'exporting'].includes(state.status);
   const step = state.items.length ? 3 : state.source ? 2 : 1;
   const fileSize = state.source
@@ -149,18 +161,24 @@ export default function App({ services }: { services: Services }) {
           <SourcePreview
             source={state.source}
             items={state.items}
+            selectedIds={state.selectedIds}
             onFile={load}
             onError={reportError}
             disabled={busy}
           />
           <ResultsPanel
             items={state.items}
+            selectedIds={state.selectedIds}
             completed={state.status === 'complete'}
             disabled={busy}
             exporting={state.status === 'exporting'}
             downloaded={state.downloaded}
             dirty={state.dirty}
             onRename={rename}
+            onToggleSelect={toggleSelect}
+            onSelectAll={selectAll}
+            onDeselectAll={deselectAll}
+            onDownloadSingle={downloadSingle}
             onExport={exportZip}
           />
         </div>

@@ -7,12 +7,13 @@ import { UploadZone } from './UploadZone';
 interface Props {
   source: SourceImage | null;
   items: ImageItem[];
+  selectedIds?: Set<number>;
   disabled: boolean;
   onFile: (file: File) => void;
   onError: (message: string) => void;
 }
 
-export function SourcePreview({ source, items, disabled, onFile, onError }: Props) {
+export function SourcePreview({ source, items, selectedIds, disabled, onFile, onError }: Props) {
   const [showBounds, setShowBounds] = useState(true);
   return (
     <section className="source-panel panel">
@@ -38,20 +39,23 @@ export function SourcePreview({ source, items, disabled, onFile, onError }: Prop
               onError={() => onError('No se pudo abrir el PNG. Puede estar incompleto o dañado.')}
             />
             {showBounds &&
-              items.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="region-bound"
-                  style={{
-                    left: `${(item.left / source.width) * 100}%`,
-                    top: `${(item.top / source.height) * 100}%`,
-                    width: `${((item.right - item.left) / source.width) * 100}%`,
-                    height: `${((item.bottom - item.top) / source.height) * 100}%`,
-                  }}
-                >
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                </div>
-              ))}
+              items.map((item, index) => {
+                const isSelected = !selectedIds || selectedIds.has(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className={`region-bound ${isSelected ? 'is-selected' : 'is-unselected'}`}
+                    style={{
+                      left: `${(item.left / source.width) * 100}%`,
+                      top: `${(item.top / source.height) * 100}%`,
+                      width: `${((item.right - item.left) / source.width) * 100}%`,
+                      height: `${((item.bottom - item.top) / source.height) * 100}%`,
+                    }}
+                  >
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                  </div>
+                );
+              })}
           </div>
         ) : (
           <UploadZone onFile={onFile} onError={onError} disabled={disabled} />
