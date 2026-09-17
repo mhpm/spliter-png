@@ -79,11 +79,7 @@ function ImageCard({
             e.stopPropagation();
             onToggleSelect(item.id);
           }}
-          aria-label={
-            selected
-              ? `Deselect element ${index + 1}`
-              : `Select element ${index + 1}`
-          }
+          aria-label={selected ? `Deselect element ${index + 1}` : `Select element ${index + 1}`}
           aria-pressed={selected}
           title={selected ? 'Exclude from download' : 'Include in download'}
         >

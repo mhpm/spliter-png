@@ -39,11 +39,7 @@ export function UploadZone({ onFile, onError, disabled, compact = false }: Props
       </div>
       <div>
         <p className="font-semibold text-ink">
-          {isDragActive
-            ? 'Drop your image here'
-            : compact
-              ? 'Change image'
-              : 'Drag your PNG here'}
+          {isDragActive ? 'Drop your image here' : compact ? 'Change image' : 'Drag your PNG here'}
         </p>
         {!compact && <p className="mt-2 text-sm text-muted">or click to browse your computer</p>}
       </div>

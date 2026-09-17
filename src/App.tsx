@@ -3,6 +3,7 @@ import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
 import { Crop, LockKeyhole, Scissors, Sparkles } from 'lucide-react';
 import type { Services } from './application/use-splitter';
 import { ExtractorWorkspace } from './components/ExtractorWorkspace';
+import { VersionBadge } from './components/VersionBadge';
 
 const BackgroundEditor = lazy(() => import('./background/components/BackgroundEditor'));
 
@@ -19,9 +20,11 @@ export default function App({ services }: { services: Services }) {
             spliter<span className="brand-dot">.</span>
           </span>
         </a>
+        <VersionBadge />
         <div className="header-divider" />
         <span className="header-description">Your images, ready to create</span>
         <span className="local-badge">
+          <span className="local-badge-dot" aria-hidden="true" />
           <LockKeyhole size={13} />
           <span>100% in your browser</span>
         </span>

@@ -16,12 +16,8 @@ test('upload, extract, inspect, rename and download six intact PNGs', async ({ p
   await page.getByRole('button', { name: 'Enlarge element 1', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('button', { name: 'Close preview' }).click();
-  await page
-    .getByRole('textbox', { name: 'Element 1 name', exact: true })
-    .fill('green piece');
-  await page
-    .getByRole('textbox', { name: 'Element 2 name', exact: true })
-    .fill('green piece');
+  await page.getByRole('textbox', { name: 'Element 1 name', exact: true }).fill('green piece');
+  await page.getByRole('textbox', { name: 'Element 2 name', exact: true }).fill('green piece');
   await expect(page.getByRole('button', { name: /Download ZIP/ })).toBeDisabled();
   await page.getByRole('textbox', { name: 'Element 2 name', exact: true }).fill('circle');
   const downloadEvent = page.waitForEvent('download');
@@ -89,9 +85,9 @@ test('16 megapixel input can be cancelled, retried and replaced without stale re
   await page.getByLabel('PNG file').setInputFiles('tests/fixtures/sample.png');
   await page.getByRole('button', { name: 'Extract elements', exact: true }).click();
   await expect(page.getByRole('textbox', { name: /Element \d+ name/ })).toHaveCount(6);
-  await expect(
-    page.getByRole('textbox', { name: 'Element 1 name', exact: true }),
-  ).toHaveValue('sample_001');
+  await expect(page.getByRole('textbox', { name: 'Element 1 name', exact: true })).toHaveValue(
+    'sample_001',
+  );
 });
 
 test('user can select and deselect elements to download only chosen pieces', async ({ page }) => {

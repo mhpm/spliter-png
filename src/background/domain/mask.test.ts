@@ -117,8 +117,7 @@ describe('non-destructive editing', () => {
   it('restores erased color when restore is true', () => {
     const mask = createMask(2, 2, false); // All 0
     const pixels = new Uint8ClampedArray([
-      200, 0, 0, 255,  200, 0, 0, 255,
-      200, 0, 0, 255,  0, 200, 0, 255,
+      200, 0, 0, 255, 200, 0, 0, 255, 200, 0, 0, 255, 0, 200, 0, 255,
     ]);
     eraseColor(mask, pixels, { x: 0, y: 0 }, 10, true, true);
     expect(mask.data[0]).toBe(255);

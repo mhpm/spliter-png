@@ -180,7 +180,9 @@ export function SettingsPanel({
         <ShieldCheck size={19} />
         <div>
           <p>Your image stays with you</p>
-          <span>Everything is processed in your browser. Your files are never uploaded to a server.</span>
+          <span>
+            Everything is processed in your browser. Your files are never uploaded to a server.
+          </span>
         </div>
       </div>
     </section>

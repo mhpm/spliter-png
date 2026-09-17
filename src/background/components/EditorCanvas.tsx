@@ -206,7 +206,13 @@ export function EditorCanvas({
           aria-label="Image editor. Arrow keys move the cursor; Space applies the selected tool. Hold Shift for larger steps."
           style={{
             cursor:
-              tool === 'pan' ? 'grab' : (tool === 'wand' || selecting) ? 'crosshair' : original ? 'default' : 'none',
+              tool === 'pan'
+                ? 'grab'
+                : tool === 'wand' || selecting
+                  ? 'crosshair'
+                  : original
+                    ? 'default'
+                    : 'none',
           }}
           onPointerDown={down}
           onPointerMove={move}
@@ -276,8 +282,8 @@ export function EditorCanvas({
             style={{
               left: cursor.x * scale,
               top: cursor.y * scale,
-              width: (selecting || tool === 'wand') ? 18 : diameter * scale,
-              height: (selecting || tool === 'wand') ? 18 : diameter * scale,
+              width: selecting || tool === 'wand' ? 18 : diameter * scale,
+              height: selecting || tool === 'wand' ? 18 : diameter * scale,
             }}
           />
         )}

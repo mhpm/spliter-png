@@ -53,8 +53,8 @@ export default function BackgroundEditor() {
     renderPng: exportCutout,
   }));
   const editor = useBackgroundEditor(services);
-  const [tool, setTool] = useState<EditTool>('wand');
-  const [panel, setPanel] = useState<'brush' | 'select' | 'wand'>('wand');
+  const [tool, setTool] = useState<EditTool>('erase');
+  const [panel, setPanel] = useState<'brush' | 'select' | 'wand'>('brush');
   const [diameter, setDiameter] = useState(40);
   const [hardness, setHardness] = useState(0.8);
   const [tolerance, setTolerance] = useState(25);
@@ -79,8 +79,8 @@ export default function BackgroundEditor() {
     onDropAccepted: ([file]) => {
       setZoom(1);
       setOriginal(false);
-      setTool('wand');
-      setPanel('wand');
+      setTool('erase');
+      setPanel('brush');
       void editor.load(file);
     },
     onDropRejected: () => editor.setError('Choose one PNG, JPG or WebP image, up to 25 MB.'),
@@ -106,17 +106,18 @@ export default function BackgroundEditor() {
       setOriginal(false);
     }
   }
-  const tip = tool === 'wand'
-    ? 'Click anywhere on the background to erase that color.'
-    : tool === 'restore'
-      ? 'Watermark guide active. Paint over any faint area to restore it to full opacity.'
-      : selecting
-        ? 'Click an object to keep it. Mark unwanted areas with Exclude.'
-        : original
-          ? 'You’re viewing the original. Switch to Result to keep editing.'
-          : tool === 'erase'
-            ? 'Brush over the details you want to remove.'
-            : 'Drag to move around your image.';
+  const tip =
+    tool === 'wand'
+      ? 'Click anywhere on the background to erase that color.'
+      : tool === 'restore'
+        ? 'Watermark guide active. Paint over any faint area to restore it to full opacity.'
+        : selecting
+          ? 'Click an object to keep it. Mark unwanted areas with Exclude.'
+          : original
+            ? 'You’re viewing the original. Switch to Result to keep editing.'
+            : tool === 'erase'
+              ? 'Brush over the details you want to remove.'
+              : 'Drag to move around your image.';
 
   return (
     <main className="background-workspace">
@@ -126,6 +127,9 @@ export default function BackgroundEditor() {
           <Brush size={18} />
           <span>Cutout studio</span>
         </span>
+
+        <div className="studio-toolbar-divider" />
+
         <div className="studio-compare" aria-label="Preview mode">
           <button
             aria-pressed={!original}
@@ -154,6 +158,58 @@ export default function BackgroundEditor() {
             Original
           </button>
         </div>
+
+        <div className="studio-preview-swatches" aria-label="Preview background options">
+          <span className="studio-preview-label">Backdrop:</span>
+          <div className="flex items-center gap-1.5">
+            {['checker', 'light', 'dark'].map((value) => (
+              <button
+                key={value}
+                className={`studio-swatch preview-${value}`}
+                aria-label={`${value} preview background`}
+                aria-pressed={background === value}
+                onClick={() => setBackground(value)}
+                title={`${value} preview background`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="studio-toolbar-divider" />
+
+        <div className="studio-mode-switch" aria-label="Retouch mode">
+          <button
+            aria-pressed={panel === 'wand'}
+            disabled={disabled}
+            onClick={() => {
+              setPanel('wand');
+              chooseTool('wand');
+            }}
+          >
+            <Wand2 size={14} /> Color wand
+          </button>
+          <button
+            aria-pressed={panel === 'brush'}
+            disabled={disabled}
+            onClick={() => {
+              setPanel('brush');
+              chooseTool('erase');
+            }}
+          >
+            <Brush size={14} /> Brushes
+          </button>
+          <button
+            aria-pressed={panel === 'select'}
+            disabled={disabled}
+            onClick={() => {
+              setPanel('select');
+              chooseTool('keep');
+            }}
+          >
+            <MousePointer2 size={14} /> Select objects
+          </button>
+        </div>
+
         <div className="studio-history">
           <button
             className="studio-icon"
@@ -174,6 +230,7 @@ export default function BackgroundEditor() {
             <Redo2 size={19} />
           </button>
         </div>
+
         <button
           className="studio-download"
           disabled={disabled || !!nameError(editor.name)}
@@ -352,34 +409,22 @@ export default function BackgroundEditor() {
           >
             <Sparkles size={16} /> Auto remove background
           </button>
-          <div className="studio-mode-switch" aria-label="Retouch mode">
-            <button
-              aria-pressed={panel === 'wand'}
-              onClick={() => {
-                setPanel('wand');
-                chooseTool('wand');
-              }}
-            >
-              <Wand2 size={14} /> Color wand
-            </button>
-            <button
-              aria-pressed={panel === 'brush'}
-              onClick={() => {
-                setPanel('brush');
-                chooseTool('erase');
-              }}
-            >
-              <Brush size={14} /> Brushes
-            </button>
-            <button
-              aria-pressed={panel === 'select'}
-              onClick={() => {
-                setPanel('select');
-                chooseTool('keep');
-              }}
-            >
-              <MousePointer2 size={14} /> Select objects
-            </button>
+          <div className="studio-tool-heading">
+            <span className="studio-tool-badge">
+              {panel === 'wand' ? (
+                <>
+                  <Wand2 size={13} /> Color wand tool
+                </>
+              ) : panel === 'brush' ? (
+                <>
+                  <Brush size={13} /> Manual brush
+                </>
+              ) : (
+                <>
+                  <MousePointer2 size={13} /> Object selector
+                </>
+              )}
+            </span>
           </div>
           {panel === 'wand' ? (
             <div className="studio-tools-body">
@@ -405,7 +450,8 @@ export default function BackgroundEditor() {
                 <span>Contiguous (connected area only)</span>
               </label>
               <p className="studio-brush-tip">
-                Click on any background color to remove it. Keep &quot;Contiguous&quot; checked to protect colors inside frames or text.
+                Click on any background color to remove it. Keep &quot;Contiguous&quot; checked to
+                protect colors inside frames or text.
               </p>
             </div>
           ) : panel === 'brush' ? (
@@ -501,20 +547,6 @@ export default function BackgroundEditor() {
               <p className="studio-microcopy">Replaces your cutout. Undo brings it back.</p>
             </div>
           )}
-          <div className="studio-preview-color">
-            <span>Preview background</span>
-            <div>
-              {['checker', 'light', 'dark'].map((value) => (
-                <button
-                  key={value}
-                  className={`studio-swatch preview-${value}`}
-                  aria-label={`${value} preview background`}
-                  aria-pressed={background === value}
-                  onClick={() => setBackground(value)}
-                />
-              ))}
-            </div>
-          </div>
           <details className="studio-details">
             <summary>
               Fine-tune & export <ChevronDown size={15} />

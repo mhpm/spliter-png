@@ -72,9 +72,7 @@ type WarmupRequest = {
   type: 'warmup';
 };
 
-self.onmessage = async ({
-  data,
-}: MessageEvent<SegmentRequest | WarmupRequest>) => {
+self.onmessage = async ({ data }: MessageEvent<SegmentRequest | WarmupRequest>) => {
   if ('type' in data && data.type === 'warmup') {
     const inCache = await isModelCached(AUTO.id);
     if (inCache && !automatic) {
@@ -129,12 +127,23 @@ self.onmessage = async ({
       const inputs = await automaticProcessor!(image);
       const output = await automatic!({ input_image: inputs.pixel_values });
       const probabilities = output.output_image as Tensor;
-      let minimum = Infinity, maximum = -Infinity;
-      for (const value of probabilities.data as Float32Array) { minimum = Math.min(minimum, value); maximum = Math.max(maximum, value); }
+      let minimum = Infinity,
+        maximum = -Infinity;
+      for (const value of probabilities.data as Float32Array) {
+        minimum = Math.min(minimum, value);
+        maximum = Math.max(maximum, value);
+      }
       const alpha = new Uint8ClampedArray(probabilities.data.length);
       const range = maximum - minimum;
-      for (let i = 0; i < alpha.length; i++) alpha[i] = range > 1e-8 ? (Number(probabilities.data[i]) - minimum) / range * 255 : Number(probabilities.data[i]) * 255;
-      const resized = await new RawImage(alpha, targetWidth, targetHeight, 1).resize(bitmap.width, bitmap.height);
+      for (let i = 0; i < alpha.length; i++)
+        alpha[i] =
+          range > 1e-8
+            ? ((Number(probabilities.data[i]) - minimum) / range) * 255
+            : Number(probabilities.data[i]) * 255;
+      const resized = await new RawImage(alpha, targetWidth, targetHeight, 1).resize(
+        bitmap.width,
+        bitmap.height,
+      );
       mask = new Uint8ClampedArray(resized.data);
     } else {
       const keep = points.filter((point: SelectionPoint) => point.kind === 'keep');

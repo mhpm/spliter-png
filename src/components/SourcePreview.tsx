@@ -87,8 +87,8 @@ export function SourcePreview({ source, items, selectedIds, disabled, onFile, on
             <p className="font-medium">One image. All its elements.</p>
           </div>
           <p>
-            Use a PNG with transparent space between pieces. Elements that touch will be
-            extracted together.
+            Use a PNG with transparent space between pieces. Elements that touch will be extracted
+            together.
           </p>
           <div className="guidance-tags">
             <span>
