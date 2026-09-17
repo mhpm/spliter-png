@@ -51,6 +51,38 @@
 }
 
 @layer components {
+  .workspace-tabs {
+    @apply flex items-center gap-7 border-b border-line bg-white px-8;
+  }
+  .workspace-tabs [role='tab'] {
+    @apply flex cursor-pointer items-center gap-2 border-b-2 border-transparent py-4 text-sm text-muted;
+    outline-offset: -3px;
+  }
+  .workspace-tabs [data-selected] {
+    @apply border-accent text-accent;
+  }
+  .workspace-tabs [role='tab'] > span {
+    border: 1px solid #d5e7dd;
+    background: #f2f8f4;
+    color: #62836e;
+    font-size: 8px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .react-aria-TabPanel[data-inert],
+  [role='tabpanel'][hidden] {
+    display: none;
+  }
+  @media (max-width: 680px) {
+    .workspace-tabs {
+      padding: 0 16px;
+      gap: 22px;
+    }
+    .workspace-tabs [role='tab'] {
+      font-size: 12px;
+    }
+  }
   .app-header {
     @apply flex items-center gap-5 border-b border-line bg-white px-8;
     height: 78px;
@@ -297,7 +329,9 @@
     border: 1px solid #238a61;
     background: #238a6108;
     pointer-events: none;
-    transition: opacity 0.2s, border-color 0.2s;
+    transition:
+      opacity 0.2s,
+      border-color 0.2s;
   }
   .region-bound.is-unselected {
     border: 1px dashed #98a5ad99;
@@ -427,7 +461,9 @@
   .image-card.is-unselected .image-thumbnail img {
     opacity: 0.45;
     filter: grayscale(35%);
-    transition: opacity 0.2s, filter 0.2s;
+    transition:
+      opacity 0.2s,
+      filter 0.2s;
   }
   .image-card.is-unselected:hover .image-thumbnail img {
     opacity: 0.8;
