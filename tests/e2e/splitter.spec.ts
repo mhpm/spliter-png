@@ -7,6 +7,12 @@ test('upload, extract, inspect, rename and download six intact PNGs', async ({ p
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto('/');
+  const supportLink = page.getByRole('link', {
+    name: 'Support this project on Buy Me a Coffee (opens in a new tab)',
+  });
+  await expect(supportLink).toHaveAttribute('href', 'https://buymeacoffee.com/michelleeex');
+  await expect(supportLink).toHaveAttribute('target', '_blank');
+  await expect(supportLink).toHaveAttribute('rel', 'noopener noreferrer');
   await page.screenshot({ path: 'test-results/desktop-empty.png', fullPage: true });
   await expect(page.getByRole('button', { name: 'Download ZIP' })).toBeDisabled();
   await page.getByLabel('PNG file').setInputFiles('tests/fixtures/sample.png');

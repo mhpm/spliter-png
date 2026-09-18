@@ -103,6 +103,8 @@ npm run preview
 
 El sitio no incluye analítica ni peticiones de subida de imágenes. El alojamiento recibe las peticiones normales de sus archivos públicos, pero no los PNG que se procesan.
 
+El botón clásico **Buy me a coffee** abre la página pública de [Buy Me a Coffee](https://buymeacoffee.com/michelleeex) en una pestaña nueva. La imagen oficial se sirve desde la propia aplicación y el botón es un enlace normal: no carga el widget ni scripts de pago dentro del sitio.
+
 ## Editor de fondos
 
 - **Auto remove background** detecta el primer plano con ISNet de uso general. La primera ejecución descarga unos 46 MB de pesos.

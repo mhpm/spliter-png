@@ -12,12 +12,12 @@ export default function App({ services }: { services: Services }) {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <a href="/" className="brand" aria-label="Spliter, home">
+        <a href="/" className="brand" aria-label="Splitter, home">
           <span className="brand-mark">
             <Crop size={23} strokeWidth={1.8} />
           </span>
           <span>
-            spliter<span className="brand-dot">.</span>
+            Splitter<span className="brand-dot">.</span>
           </span>
         </a>
         <VersionBadge />
@@ -28,6 +28,15 @@ export default function App({ services }: { services: Services }) {
           <LockKeyhole size={13} />
           <span>100% in your browser</span>
         </span>
+        <a
+          className="support-button"
+          href="https://buymeacoffee.com/michelleeex"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Support this project on Buy Me a Coffee (opens in a new tab)"
+        >
+          <img src="/buy-me-a-coffee.png" alt="Buy me a coffee" />
+        </a>
       </header>
       <Tabs
         defaultSelectedKey="extract"

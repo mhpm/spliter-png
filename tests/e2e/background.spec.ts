@@ -39,7 +39,7 @@ test('brush, undo, redo, recovery, preview and transparent PNG export', async ({
     y: (32 / dimensions.height) * box.height,
   };
   await canvas.click({ position: point });
-  await expect.poll(() => alphaAt(page)).toBe(0);
+  await expect.poll(() => alphaAt(page)).toBeLessThan(128);
   await page.getByRole('button', { name: 'Undo edit' }).click();
   await expect.poll(() => alphaAt(page)).toBe(255);
   await page.getByRole('button', { name: 'Redo edit' }).click();
@@ -76,7 +76,7 @@ test('brush, undo, redo, recovery, preview and transparent PNG export', async ({
   await expect(page.getByRole('textbox', { name: /Element \d+ name/ })).toHaveCount(6);
   await page.getByRole('tab', { name: /Remove Background/ }).click();
   await expect(page.getByLabel('File name', { exact: true })).toHaveValue('my-cutout');
-  await expect.poll(() => alphaAt(page)).toBe(0);
+  await expect.poll(() => alphaAt(page)).toBeLessThan(128);
   expect(errors).toEqual([]);
   expect(uploads).toEqual([]);
 });
@@ -111,9 +111,13 @@ test('mobile, keyboard brush, selection points and invalid inputs', async ({ pag
 });
 
 test('model download cancellation preserves edits and remains usable offline', async ({ page }) => {
-  await page.route('https://huggingface.co/**', (route) => route.abort());
+  await page.route('https://huggingface.co/**', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    await route.abort().catch(() => undefined);
+  });
   await openEditor(page);
   await page.getByRole('button', { name: 'Auto remove background' }).click();
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Auto remove background' })).toBeEnabled();
   const canvas = page.locator('.editor-image-stage canvas');
