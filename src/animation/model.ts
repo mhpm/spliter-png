@@ -40,3 +40,136 @@ export function sheetLayout(frames: FrameSize[], columns: number, padding: numbe
     );
   return { cellWidth, cellHeight, columns, rows, width, height };
 }
+
+export interface LayerTransform {
+  scale: number;
+  flipX: boolean;
+  flipY: boolean;
+  rotation: number;
+  x: number;
+  y: number;
+  opacity: number;
+  visible: boolean;
+}
+
+export const DEFAULT_LAYER_TRANSFORM: LayerTransform = {
+  scale: 100,
+  flipX: false,
+  flipY: false,
+  rotation: 0,
+  x: 0,
+  y: 0,
+  opacity: 1,
+  visible: true,
+};
+
+export interface FrameLayer {
+  id: string;
+  spriteId: number;
+  name: string;
+  blob: Blob;
+  url: string;
+  width: number;
+  height: number;
+  transform: LayerTransform;
+}
+
+export interface StudioFrame {
+  id: string;
+  name: string;
+  layers: FrameLayer[];
+}
+
+export function isDefaultTransform(t: LayerTransform): boolean {
+  return (
+    t.scale === 100 &&
+    !t.flipX &&
+    !t.flipY &&
+    t.rotation === 0 &&
+    t.x === 0 &&
+    t.y === 0 &&
+    t.opacity === 1 &&
+    t.visible
+  );
+}
+
+export function isFrameUntouched(frame: StudioFrame): boolean {
+  return frame.layers.length === 1 && isDefaultTransform(frame.layers[0].transform);
+}
+
+export function calculateTransformedLayerBounds(layer: FrameLayer): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  width: number;
+  height: number;
+} {
+  const scale = (layer.transform.scale || 100) / 100;
+  const w = layer.width * scale;
+  const h = layer.height * scale;
+  const rad = ((layer.transform.rotation || 0) * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rad));
+  const sin = Math.abs(Math.sin(rad));
+  const bbW = Math.round(w * cos + h * sin);
+  const bbH = Math.round(w * sin + h * cos);
+
+  const cx = layer.transform.x || 0;
+  const cy = layer.transform.y || 0;
+
+  return {
+    minX: cx - bbW / 2,
+    maxX: cx + bbW / 2,
+    minY: cy - bbH / 2,
+    maxY: cy + bbH / 2,
+    width: bbW,
+    height: bbH,
+  };
+}
+
+export function calculateFrameDimensions(frame: StudioFrame): { width: number; height: number } {
+  const visibleLayers = frame.layers.filter((l) => l.transform.visible);
+  if (!visibleLayers.length) return { width: 32, height: 32 };
+  if (isFrameUntouched(frame)) {
+    return { width: frame.layers[0].width, height: frame.layers[0].height };
+  }
+  let maxExtentX = 0;
+  let maxExtentY = 0;
+  for (const layer of visibleLayers) {
+    const bounds = calculateTransformedLayerBounds(layer);
+    maxExtentX = Math.max(maxExtentX, Math.abs(bounds.minX), Math.abs(bounds.maxX));
+    maxExtentY = Math.max(maxExtentY, Math.abs(bounds.minY), Math.abs(bounds.maxY));
+  }
+  return {
+    width: Math.max(1, Math.ceil(maxExtentX * 2)),
+    height: Math.max(1, Math.ceil(maxExtentY * 2)),
+  };
+}
+
+export function createLayerFromItem(
+  item: { id: number; name: string; blob: Blob; url: string; width: number; height: number },
+  transform?: Partial<LayerTransform>,
+): FrameLayer {
+  return {
+    id: `layer-${item.id}-${Math.random().toString(36).slice(2, 9)}`,
+    spriteId: item.id,
+    name: item.name,
+    blob: item.blob,
+    url: item.url,
+    width: item.width,
+    height: item.height,
+    transform: { ...DEFAULT_LAYER_TRANSFORM, ...transform },
+  };
+}
+
+export function createFrameFromItem(
+  item: { id: number; name: string; blob: Blob; url: string; width: number; height: number },
+  index = 0,
+): StudioFrame {
+  return {
+    id: `frame-${index}-${item.id}-${Math.random().toString(36).slice(2, 7)}`,
+    name: item.name,
+    layers: [createLayerFromItem(item)],
+  };
+}
+

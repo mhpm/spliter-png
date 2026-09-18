@@ -123,6 +123,7 @@ test('animation ordering, playback, PNG sheet, JSON coordinates and GIF frames a
       [...bytes].filter((_, index) => index % 4 === 3).map((value) => (value < 128 ? 0 : 255));
     expect(alpha(decoded)).toEqual(alpha(expected));
   }
+  await page.screenshot({ path: 'screenshots/animation-desktop.png' });
   expect(errors).toEqual([]);
 });
 
@@ -134,7 +135,70 @@ test('animation tools fit mobile and close returns to selected sprites', async (
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const dialog = page.getByRole('dialog');
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await page.screenshot({ path: 'test-results/animation-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'screenshots/animation-mobile.png', fullPage: true });
   await page.getByRole('button', { name: 'Close animation studio' }).click();
   await expect(page.getByRole('button', { name: 'Create animation' })).toBeVisible();
 });
+
+test('animation studio sprite manipulation, layers combining, and composite export', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await extract(page);
+
+  // Select first 2 elements and open animation studio
+  await page.getByRole('button', { name: 'Deselect all elements' }).click();
+  for (const i of [1, 2])
+    await page.getByRole('button', { name: `Toggle source element ${i}`, exact: true }).click();
+  await page.getByRole('button', { name: 'Create animation' }).click();
+  await expect(page.getByRole('heading', { name: 'Animation studio' })).toBeVisible();
+
+  // Test transformation controls on active sprite
+  await page.getByRole('button', { name: 'Flip H', exact: true }).click();
+  await page.getByRole('button', { name: '+90°' }).first().click();
+  await page.getByRole('button', { name: '150%', exact: true }).click();
+  await expect(page.getByText('Scale: 150%').first()).toBeVisible();
+
+  // Test combining another sprite from extracted library into frame 1
+  await page.getByRole('button', { name: 'Combine another sprite' }).click();
+  await expect(page.getByRole('region', { name: 'Sprite Library' })).toBeVisible();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'screenshots/drawer-open.png' });
+  await page.getByRole('button', { name: /Combine in Frame 1/ }).first().click();
+
+  // Verify frame 1 now has 2 layers
+  await expect(page.getByText(/Layers in Frame 1 \(2\)/)).toBeVisible();
+
+  // Test multi-selection of layers
+  await page.getByRole('button', { name: 'Select all' }).click();
+  await expect(page.getByText(/2 layers selected/).first()).toBeVisible();
+
+  // Perform collective transform on both selected layers
+  await page.getByRole('button', { name: 'Flip V', exact: true }).click();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByRole('button', { name: 'Redo' })).toBeEnabled();
+
+  // Test Redo button
+  await page.getByRole('button', { name: 'Redo' }).click();
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+
+  // Test Ctrl+Z shortcut
+  await page.keyboard.press('Control+z');
+
+  // Verify composite export runs cleanly
+  const sheet = await download(page, 'Download spritesheet PNG');
+  expect(sheet.length).toBeGreaterThan(0);
+  const metadata = JSON.parse((await download(page, 'Download frame data (JSON)')).toString());
+  expect(metadata.frames[0].layersCount).toBe(2);
+
+  await page.locator('.animation-workspace-view').screenshot({ path: 'screenshots/animation-multi-layer.png' });
+
+  // Test return to extractor workspace
+  await page.getByRole('button', { name: 'Close animation studio' }).click();
+  await expect(page.getByRole('button', { name: 'Create animation' })).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+

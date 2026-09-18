@@ -37,26 +37,28 @@ export function ExtractorWorkspace({ services }: { services: Services }) {
 
   return (
     <main>
-      <div className="workspace-heading">
-        <div>
-          <div className="eyebrow mb-2 text-accent">WORKSPACE</div>
-          <h1>Element Extractor</h1>
-          <p>Separate, name, and download individual pieces from your image.</p>
+      {!animationFrames && (
+        <div className="workspace-heading">
+          <div>
+            <div className="eyebrow mb-2 text-accent">WORKSPACE</div>
+            <h1>Element Extractor</h1>
+            <p>Separate, name, and download individual pieces from your image.</p>
+          </div>
+          <nav className="steps" aria-label="Progress">
+            {['Upload', 'Extract', 'Download'].map((label, index) => (
+              <div
+                key={label}
+                className={`step ${step >= index + 1 ? 'current' : ''}`}
+                aria-current={step === index + 1 ? 'step' : undefined}
+              >
+                <span>{step > index + 1 ? <Check size={12} /> : index + 1}</span>
+                {label}
+                {index < 2 && <ArrowRight className="step-arrow" size={13} />}
+              </div>
+            ))}
+          </nav>
         </div>
-        <nav className="steps" aria-label="Progress">
-          {['Upload', 'Extract', 'Download'].map((label, index) => (
-            <div
-              key={label}
-              className={`step ${step >= index + 1 ? 'current' : ''}`}
-              aria-current={step === index + 1 ? 'step' : undefined}
-            >
-              <span>{step > index + 1 ? <Check size={12} /> : index + 1}</span>
-              {label}
-              {index < 2 && <ArrowRight className="step-arrow" size={13} />}
-            </div>
-          ))}
-        </nav>
-      </div>
+      )}
       {state.error && (
         <div className="notice error-notice" role="alert">
           <AlertCircle size={18} />
@@ -101,24 +103,26 @@ export function ExtractorWorkspace({ services }: { services: Services }) {
           </Button>
         </div>
       )}
-      <SelectionTools
-        count={state.selectedIds.size}
-        disabled={busy || state.dirty}
-        onEdit={editSelected}
-        onAnimate={() =>
-          setAnimationFrames(state.items.filter((item) => state.selectedIds.has(item.id)))
-        }
-      />
-      {animationFrames && (
-        <Suspense fallback={<p role="status">Opening animation studio…</p>}>
+      {animationFrames ? (
+        <Suspense fallback={<div className="notice info-notice" role="status"><p>Opening animation studio…</p></div>}>
           <AnimationEditor
             initialFrames={animationFrames}
+            availableSprites={state.items}
             onClose={() => setAnimationFrames(null)}
             download={services.download}
           />
         </Suspense>
-      )}
-      <div className="workspace-grid">
+      ) : (
+        <>
+          <SelectionTools
+            count={state.selectedIds.size}
+            disabled={busy || state.dirty}
+            onEdit={editSelected}
+            onAnimate={() =>
+              setAnimationFrames(state.items.filter((item) => state.selectedIds.has(item.id)))
+            }
+          />
+          <div className="workspace-grid">
         <aside className="sidebar">
           <div className="sidebar-file">
             <p className="eyebrow mb-4">YOUR FILE</p>
@@ -177,6 +181,8 @@ export function ExtractorWorkspace({ services }: { services: Services }) {
           onExport={exportZip}
         />
       </div>
+    </>
+  )}
       <footer className="workspace-footer">
         <span>Designed for images with transparent backgrounds.</span>
         <span>
