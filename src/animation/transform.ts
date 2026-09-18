@@ -4,6 +4,7 @@ import {
   type StudioFrame,
   isFrameUntouched,
   calculateFrameDimensions,
+  getLayerDisplaySize,
   layersInPaintOrder,
 } from './model';
 
@@ -82,9 +83,7 @@ export async function compositeFrame(
         ctx.globalAlpha = Math.max(0, Math.min(1, layer.transform.opacity));
       }
 
-      const scale = (layer.transform.scale || 100) / 100;
-      const drawW = layer.width * scale;
-      const drawH = layer.height * scale;
+      const { width: drawW, height: drawH } = getLayerDisplaySize(layer);
 
       ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.restore();

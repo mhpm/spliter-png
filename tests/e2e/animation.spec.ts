@@ -79,10 +79,11 @@ test('animation ordering, playback, PNG sheet, JSON coordinates and GIF frames a
   const third = await download(page, 'Download PNG for element 3');
   await page.getByRole('button', { name: 'Create animation' }).click();
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
-  await page.getByRole('button', { name: 'Move frame later' }).click();
-  await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
+  await expect(page.locator('.animation-preview-panel .animation-timeline')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Move selected frame right' }).click();
+  await page.getByRole('button', { name: 'Duplicate selected frame' }).click();
   await expect(page.getByTestId('frame-counter')).toHaveText('Frame 3 / 3');
-  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete selected frame' }).click();
   const animTab = page.getByRole('tab', { name: /Animation/i });
   if (await animTab.isVisible().catch(() => false)) {
     await animTab.click();
@@ -159,6 +160,147 @@ test('animation tools fit mobile and close returns to selected sprites', async (
   await expect(page.getByRole('button', { name: 'Create animation' })).toBeVisible();
 });
 
+test('a selected sprite resizes proportionally by dragging a corner and can be undone', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await extract(page);
+  await page.getByRole('button', { name: 'Deselect all elements' }).click();
+  await page.getByRole('button', { name: 'Toggle source element 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Create animation' }).click();
+
+  const layer = page.locator('.stage-layer-element[data-layer-index="0"]');
+  const handle = page.getByRole('button', { name: /Resize .* from br/ });
+  const before = await layer.boundingBox();
+  const corner = await handle.boundingBox();
+  expect(before).not.toBeNull();
+  expect(corner).not.toBeNull();
+
+  await page.mouse.move(corner!.x + corner!.width / 2, corner!.y + corner!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(corner!.x + corner!.width / 2 + 45, corner!.y + corner!.height / 2 + 45, {
+    steps: 6,
+  });
+  await page.mouse.up();
+
+  const after = await layer.boundingBox();
+  expect(after).not.toBeNull();
+  expect(after!.width).toBeGreaterThan(before!.width);
+  expect(after!.height).toBeGreaterThan(before!.height);
+  expect(Math.abs(after!.x - before!.x)).toBeLessThanOrEqual(3);
+  expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(3);
+  expect(Number(await page.getByLabel('Layer width in pixels').inputValue())).toBeGreaterThan(
+    before!.width,
+  );
+
+  await page.getByRole('button', { name: 'Undo' }).click();
+  const restored = await layer.boundingBox();
+  expect(restored).not.toBeNull();
+  expect(Math.abs(restored!.width - before!.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(restored!.height - before!.height)).toBeLessThanOrEqual(1);
+
+  const rightHandle = page.getByRole('button', { name: /Resize width from right edge/ });
+  const rightEdge = await rightHandle.boundingBox();
+  expect(rightEdge).not.toBeNull();
+  await page.mouse.move(
+    rightEdge!.x + rightEdge!.width / 2,
+    rightEdge!.y + rightEdge!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    rightEdge!.x + rightEdge!.width / 2 + 40,
+    rightEdge!.y + rightEdge!.height / 2,
+    { steps: 6 },
+  );
+  await page.mouse.up();
+
+  const stretched = await layer.boundingBox();
+  expect(stretched).not.toBeNull();
+  expect(stretched!.width).toBeGreaterThan(restored!.width);
+  expect(Math.abs(stretched!.height - restored!.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(stretched!.x - restored!.x)).toBeLessThanOrEqual(2);
+
+  const widthInput = page.getByLabel('Layer width in pixels');
+  const heightInput = page.getByLabel('Layer height in pixels');
+  const widthBeforeManualHeight = Number(await widthInput.inputValue());
+  const heightBeforeManualHeight = Number(await heightInput.inputValue());
+  await page.getByRole('button', { name: 'Unlock aspect ratio' }).click();
+  await heightInput.fill(String(heightBeforeManualHeight + 20));
+  await heightInput.press('Enter');
+  await expect(heightInput).toHaveValue(String(heightBeforeManualHeight + 20));
+  await expect(widthInput).toHaveValue(String(widthBeforeManualHeight));
+
+  const inspector = page.locator('.animation-settings');
+  await expect(inspector.getByLabel('Rotation in degrees')).toBeVisible();
+  await expect(inspector.getByRole('button', { name: /Flip/ })).toHaveCount(0);
+});
+
+test('a draggable pivot stays fixed while the selected sprite rotates around it', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await extract(page);
+  await page.getByRole('button', { name: 'Deselect all elements' }).click();
+  await page.getByRole('button', { name: 'Toggle source element 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Create animation' }).click();
+
+  const layer = page.locator('.stage-layer-element[data-layer-index="0"]');
+  const pivot = page.getByRole('button', { name: /Move rotation pivot/ });
+  const layerBefore = await layer.boundingBox();
+  const pivotAtCenter = await pivot.boundingBox();
+  expect(layerBefore).not.toBeNull();
+  expect(pivotAtCenter).not.toBeNull();
+
+  await page.mouse.move(
+    pivotAtCenter!.x + pivotAtCenter!.width / 2,
+    pivotAtCenter!.y + pivotAtCenter!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    pivotAtCenter!.x + pivotAtCenter!.width / 2 + layerBefore!.width / 3,
+    pivotAtCenter!.y + pivotAtCenter!.height / 2,
+    { steps: 6 },
+  );
+  await page.mouse.up();
+
+  const pivotBeforeRotation = await pivot.boundingBox();
+  expect(pivotBeforeRotation).not.toBeNull();
+  const fixedPoint = {
+    x: pivotBeforeRotation!.x + pivotBeforeRotation!.width / 2,
+    y: pivotBeforeRotation!.y + pivotBeforeRotation!.height / 2,
+  };
+
+  await page.getByRole('button', { name: '+90°', exact: true }).first().click();
+
+  const pivotAfterRotation = await pivot.boundingBox();
+  const layerAfterRotation = await layer.boundingBox();
+  expect(pivotAfterRotation).not.toBeNull();
+  expect(layerAfterRotation).not.toBeNull();
+  expect(
+    Math.abs(pivotAfterRotation!.x + pivotAfterRotation!.width / 2 - fixedPoint.x),
+  ).toBeLessThanOrEqual(2);
+  expect(
+    Math.abs(pivotAfterRotation!.y + pivotAfterRotation!.height / 2 - fixedPoint.y),
+  ).toBeLessThanOrEqual(2);
+  expect(Math.abs(layerAfterRotation!.x - layerBefore!.x)).toBeGreaterThan(5);
+
+  await page.getByRole('button', { name: 'Center pivot' }).click();
+  const centeredPivot = await pivot.boundingBox();
+  const centeredLayer = await layer.boundingBox();
+  expect(centeredPivot).not.toBeNull();
+  expect(centeredLayer).not.toBeNull();
+  expect(
+    Math.abs(
+      centeredPivot!.x + centeredPivot!.width / 2 -
+        (centeredLayer!.x + centeredLayer!.width / 2),
+    ),
+  ).toBeLessThanOrEqual(2);
+  expect(
+    Math.abs(
+      centeredPivot!.y + centeredPivot!.height / 2 -
+        (centeredLayer!.y + centeredLayer!.height / 2),
+    ),
+  ).toBeLessThanOrEqual(2);
+});
+
 test('animation studio sprite manipulation, layers combining, and composite export', async ({
   page,
 }) => {
@@ -177,8 +319,11 @@ test('animation studio sprite manipulation, layers combining, and composite expo
   // Test transformation controls on active sprite
   await page.getByRole('button', { name: 'Flip H', exact: true }).click();
   await page.getByRole('button', { name: '+90°' }).first().click();
-  await page.getByRole('button', { name: '150%', exact: true }).click();
-  await expect(page.getByText('Scale: 150%').first()).toBeVisible();
+  const widthInput = page.getByLabel('Layer width in pixels');
+  const initialWidth = Number(await widthInput.inputValue());
+  await widthInput.fill(String(Math.round(initialWidth * 1.5)));
+  await widthInput.press('Enter');
+  await expect(widthInput).toHaveValue(String(Math.round(initialWidth * 1.5)));
 
   // Test combining another sprite from extracted library into frame 1
   await page.getByRole('button', { name: 'Combine another sprite' }).click();

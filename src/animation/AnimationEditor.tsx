@@ -14,6 +14,7 @@ import {
   FlipVertical2,
   GripVertical,
   Layers,
+  Link2,
   Pause,
   Play,
   Plus,
@@ -26,6 +27,7 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Unlink2,
   X,
 } from 'lucide-react';
 import type { ImageItem } from '../application/use-splitter';
@@ -33,13 +35,22 @@ import { safeStem } from '../domain/names';
 import {
   type FrameLayer,
   type LayerTransform,
+  type ResizeCorner,
+  type ResizeEdge,
   type StudioFrame,
   DEFAULT_LAYER_TRANSFORM,
+  MAX_LAYER_SCALE,
+  MIN_LAYER_SCALE,
   calculateFrameDimensions,
   createFrameFromItem,
   createLayerFromItem,
+  getLayerDisplaySize,
   isFrameUntouched,
   layersInPaintOrder,
+  moveLayerPivot,
+  resizeLayerFromCorner,
+  resizeLayerFromEdge,
+  rotateLayerAroundPivot,
   sheetLayout,
 } from './model';
 import { compositeFrame } from './transform';
@@ -81,6 +92,7 @@ export default function AnimationEditor({
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | null>(null);
   const [settingsTab, setSettingsTab] = useState<'sprite' | 'animation'>('sprite');
   const [showExportModal, setShowExportModal] = useState(false);
+  const [lockAspectRatio, setLockAspectRatio] = useState(true);
 
   // Undo / Redo stacks
   const [undoStack, setUndoStack] = useState<StudioFrame[][]>([]);
@@ -95,6 +107,7 @@ export default function AnimationEditor({
   } | null>(null);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const frameStripRef = useRef<HTMLDivElement | null>(null);
   const marqueeRef = useRef<{
     startX: number;
     startY: number;
@@ -103,11 +116,31 @@ export default function AnimationEditor({
   } | null>(null);
   const worker = useRef<Worker | null>(null);
   const dragSnapshot = useRef<StudioFrame[] | null>(null);
+  const resizeSnapshot = useRef<StudioFrame[] | null>(null);
+  const pivotSnapshot = useRef<StudioFrame[] | null>(null);
   const sliderSnapshot = useRef<StudioFrame[] | null>(null);
   const dragRef = useRef<{
     startX: number;
     startY: number;
     initialPositions: Map<number, { x: number; y: number }>;
+    hasMoved: boolean;
+  } | null>(null);
+  const resizeRef = useRef<{
+    layerIndex: number;
+    handle: ResizeCorner | ResizeEdge;
+    kind: 'corner' | 'edge';
+    stageCenter: { x: number; y: number };
+    sourceLayer: FrameLayer;
+    captureTarget: HTMLElement;
+    pointerId: number;
+    hasMoved: boolean;
+  } | null>(null);
+  const pivotRef = useRef<{
+    layerIndex: number;
+    stageCenter: { x: number; y: number };
+    sourceLayer: FrameLayer;
+    captureTarget: HTMLElement;
+    pointerId: number;
     hasMoved: boolean;
   } | null>(null);
 
@@ -131,6 +164,7 @@ export default function AnimationEditor({
 
   const primaryLayerIndex = validSelectedIndices[0] ?? 0;
   const primaryLayer = activeLayers[primaryLayerIndex] || activeLayers[0];
+  const primaryLayerSize = primaryLayer ? getLayerDisplaySize(primaryLayer) : null;
   const selectedLayers = useMemo(
     () => validSelectedIndices.map((i) => activeLayers[i]).filter(Boolean),
     [validSelectedIndices, activeLayers],
@@ -175,6 +209,23 @@ export default function AnimationEditor({
     }, delay);
     return () => window.clearTimeout(timer);
   }, [playing, safeActive, count, loop, delay]);
+  useEffect(() => {
+    const strip = frameStripRef.current;
+    const selectedFrame = strip?.querySelector<HTMLElement>(
+      `[data-frame-index="${safeActive}"]`,
+    );
+    if (!strip || !selectedFrame) return;
+    const frameLeft = selectedFrame.offsetLeft;
+    const frameRight = frameLeft + selectedFrame.offsetWidth;
+    const visibleLeft = strip.scrollLeft;
+    const visibleRight = visibleLeft + strip.clientWidth;
+    if (frameLeft < visibleLeft || frameRight > visibleRight) {
+      strip.scrollTo({
+        left: Math.max(0, frameLeft - (strip.clientWidth - selectedFrame.offsetWidth) / 2),
+        behavior: 'smooth',
+      });
+    }
+  }, [safeActive]);
 
   // Deep-clone frames while preserving intact Blob instances
   function cloneFrames(input: StudioFrame[]): StudioFrame[] {
@@ -248,6 +299,39 @@ export default function AnimationEditor({
     const next = [...frames];
     [next[safeActive], next[to]] = [next[to], next[safeActive]];
     updateFrames(next, to);
+  }
+
+  function duplicateActiveFrame() {
+    if (count >= 200) return;
+    const current = frames[safeActive];
+    const clone: StudioFrame = {
+      ...current,
+      id: `frame-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: `${current.name}_copy`,
+      layers: current.layers.map((layer) => ({
+        ...layer,
+        id: `layer-${Math.random().toString(36).slice(2, 9)}`,
+        transform: { ...layer.transform },
+      })),
+    };
+    const next = [...frames];
+    next.splice(safeActive + 1, 0, clone);
+    updateFrames(next, safeActive + 1);
+  }
+
+  function removeActiveFrame() {
+    if (count <= 1) return;
+    updateFrames(
+      frames.filter((_, index) => index !== safeActive),
+      Math.max(0, safeActive - 1),
+    );
+  }
+
+  function resetFrameSequence() {
+    updateFrames(
+      initialFrames.map((frame, index) => createFrameFromItem(frame, index)),
+      0,
+    );
   }
 
   // Transform update for all selected layers
@@ -489,6 +573,42 @@ export default function AnimationEditor({
     updateSelectedLayersTransform({ ...DEFAULT_LAYER_TRANSFORM }, false);
   }
 
+  function updateSelectedLayerDimension(
+    axis: 'width' | 'height',
+    value: number,
+    record = true,
+  ) {
+    if (!Number.isFinite(value)) return;
+    updateSelectedLayersTransform((transform, layer) => {
+      const currentSize = getLayerDisplaySize({ ...layer, transform });
+      const sourceSize = axis === 'width' ? layer.width : layer.height;
+      const desiredSize = Math.max(
+        1,
+        Math.min((sourceSize * MAX_LAYER_SCALE) / 100, value),
+      );
+      const currentAxisSize = axis === 'width' ? currentSize.width : currentSize.height;
+      const nextAxisScale = Math.max(
+        MIN_LAYER_SCALE,
+        Math.min(MAX_LAYER_SCALE, (desiredSize / sourceSize) * 100),
+      );
+      if (!lockAspectRatio) {
+        return axis === 'width' ? { scaleX: nextAxisScale } : { scaleY: nextAxisScale };
+      }
+      const requestedFactor = desiredSize / Math.max(1, currentAxisSize);
+      const factor = Math.min(
+        MAX_LAYER_SCALE / Math.max(transform.scaleX, transform.scaleY),
+        Math.max(
+          MIN_LAYER_SCALE / Math.min(transform.scaleX, transform.scaleY),
+          requestedFactor,
+        ),
+      );
+      return {
+        scaleX: transform.scaleX * factor,
+        scaleY: transform.scaleY * factor,
+      };
+    }, record);
+  }
+
   function addFrameFromSprite(item: ImageItem) {
     recordState(frames);
     const newFrame = createFrameFromItem(item, frames.length);
@@ -541,6 +661,60 @@ export default function AnimationEditor({
     };
   }
 
+  function handleResizePointerDown(
+    e: React.PointerEvent<HTMLButtonElement>,
+    layerIndex: number,
+    handle: ResizeCorner | ResizeEdge,
+    kind: 'corner' | 'edge',
+  ) {
+    if (playing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const layer = activeLayers[layerIndex];
+    const stageCell = stageRef.current?.querySelector<HTMLElement>('.stage-cell');
+    if (!layer || !stageCell) return;
+    const rect = stageCell.getBoundingClientRect();
+    const captureTarget = e.currentTarget;
+    captureTarget.setPointerCapture(e.pointerId);
+    setSelectedLayerIndices([layerIndex]);
+    resizeSnapshot.current = frames;
+    resizeRef.current = {
+      layerIndex,
+      handle,
+      kind,
+      stageCenter: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+      sourceLayer: layer,
+      captureTarget,
+      pointerId: e.pointerId,
+      hasMoved: false,
+    };
+  }
+
+  function handlePivotPointerDown(
+    e: React.PointerEvent<HTMLButtonElement>,
+    layerIndex: number,
+  ) {
+    if (playing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const layer = activeLayers[layerIndex];
+    const stageCell = stageRef.current?.querySelector<HTMLElement>('.stage-cell');
+    if (!layer || !stageCell) return;
+    const rect = stageCell.getBoundingClientRect();
+    const captureTarget = e.currentTarget;
+    captureTarget.setPointerCapture(e.pointerId);
+    setSelectedLayerIndices([layerIndex]);
+    pivotSnapshot.current = frames;
+    pivotRef.current = {
+      layerIndex,
+      stageCenter: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+      sourceLayer: layer,
+      captureTarget,
+      pointerId: e.pointerId,
+      hasMoved: false,
+    };
+  }
+
   function handleStagePointerDown(e: React.PointerEvent) {
     if (playing) return;
     const target = e.target as HTMLElement;
@@ -568,6 +742,77 @@ export default function AnimationEditor({
   }
 
   function handlePointerMove(e: React.PointerEvent) {
+    if (pivotRef.current) {
+      const pivot = pivotRef.current;
+      const nextPivot = moveLayerPivot(
+        pivot.sourceLayer,
+        { x: e.clientX, y: e.clientY },
+        pivot.stageCenter,
+      );
+      if (
+        nextPivot.pivotX !== pivot.sourceLayer.transform.pivotX ||
+        nextPivot.pivotY !== pivot.sourceLayer.transform.pivotY
+      ) {
+        pivot.hasMoved = true;
+      }
+      setFrames((previous) => {
+        const next = [...previous];
+        const targetFrame = { ...next[safeActive] };
+        const layers = [...targetFrame.layers];
+        const layer = layers[pivot.layerIndex];
+        if (!layer) return previous;
+        layers[pivot.layerIndex] = {
+          ...layer,
+          transform: { ...layer.transform, ...nextPivot },
+        };
+        targetFrame.layers = layers;
+        next[safeActive] = targetFrame;
+        return next;
+      });
+      return;
+    }
+
+    if (resizeRef.current) {
+      const resize = resizeRef.current;
+      const transform =
+        resize.kind === 'corner'
+          ? resizeLayerFromCorner(
+              resize.sourceLayer,
+              resize.handle as ResizeCorner,
+              { x: e.clientX, y: e.clientY },
+              resize.stageCenter,
+            )
+          : resizeLayerFromEdge(
+              resize.sourceLayer,
+              resize.handle as ResizeEdge,
+              { x: e.clientX, y: e.clientY },
+              resize.stageCenter,
+            );
+      if (
+        transform.scaleX !== resize.sourceLayer.transform.scaleX ||
+        transform.scaleY !== resize.sourceLayer.transform.scaleY ||
+        transform.x !== resize.sourceLayer.transform.x ||
+        transform.y !== resize.sourceLayer.transform.y
+      ) {
+        resize.hasMoved = true;
+      }
+      setFrames((previous) => {
+        const next = [...previous];
+        const targetFrame = { ...next[safeActive] };
+        const layers = [...targetFrame.layers];
+        const layer = layers[resize.layerIndex];
+        if (!layer) return previous;
+        layers[resize.layerIndex] = {
+          ...layer,
+          transform: { ...layer.transform, ...transform },
+        };
+        targetFrame.layers = layers;
+        next[safeActive] = targetFrame;
+        return next;
+      });
+      return;
+    }
+
     if (dragRef.current) {
       const dx = Math.round(e.clientX - dragRef.current.startX);
       const dy = Math.round(e.clientY - dragRef.current.startY);
@@ -601,6 +846,28 @@ export default function AnimationEditor({
   }
 
   function handlePointerUp(e: React.PointerEvent) {
+    if (pivotRef.current) {
+      const pivot = pivotRef.current;
+      if (pivot.hasMoved && pivotSnapshot.current) recordState(pivotSnapshot.current);
+      if (pivot.captureTarget.hasPointerCapture(pivot.pointerId)) {
+        pivot.captureTarget.releasePointerCapture(pivot.pointerId);
+      }
+      pivotRef.current = null;
+      pivotSnapshot.current = null;
+      return;
+    }
+
+    if (resizeRef.current) {
+      const resize = resizeRef.current;
+      if (resize.hasMoved && resizeSnapshot.current) recordState(resizeSnapshot.current);
+      if (resize.captureTarget.hasPointerCapture(resize.pointerId)) {
+        resize.captureTarget.releasePointerCapture(resize.pointerId);
+      }
+      resizeRef.current = null;
+      resizeSnapshot.current = null;
+      return;
+    }
+
     if (dragRef.current) {
       if (dragRef.current.hasMoved && dragSnapshot.current) {
         recordState(dragSnapshot.current);
@@ -739,6 +1006,14 @@ export default function AnimationEditor({
         name: f.name,
         duration: delay,
         layersCount: f.layers.length,
+        layers: f.layers.map((layer, index) => ({
+          index,
+          name: layer.name,
+          spriteId: layer.spriteId,
+          width: layer.width,
+          height: layer.height,
+          transform: { ...layer.transform },
+        })),
         frame: {
           x: (i % actualColumns) * cellWidth,
           y: Math.floor(i / actualColumns) * cellHeight,
@@ -985,9 +1260,12 @@ export default function AnimationEditor({
                   className="sprite-button mini-btn"
                   title="Rotate -90°"
                   onClick={() =>
-                    updateSelectedLayersTransform((t) => ({
-                      rotation: (t.rotation - 90 + 360) % 360,
-                    }))
+                    updateSelectedLayersTransform((t, layer) =>
+                      rotateLayerAroundPivot(
+                        { ...layer, transform: t },
+                        (t.rotation - 90 + 360) % 360,
+                      ),
+                    )
                   }
                 >
                   <RotateCcw size={14} /> -90°
@@ -997,38 +1275,78 @@ export default function AnimationEditor({
                   className="sprite-button mini-btn"
                   title="Rotate +90°"
                   onClick={() =>
-                    updateSelectedLayersTransform((t) => ({
-                      rotation: (t.rotation + 90) % 360,
-                    }))
+                    updateSelectedLayersTransform((t, layer) =>
+                      rotateLayerAroundPivot(
+                        { ...layer, transform: t },
+                        (t.rotation + 90) % 360,
+                      ),
+                    )
                   }
                 >
                   <RotateCw size={14} /> +90°
                 </button>
               </div>
 
-              <div className="quick-transform-group scale-group">
-                <span className="mini-label">Scale:</span>
-                <input
-                  type="range"
-                  min="10"
-                  max="400"
-                  value={primaryLayer.transform.scale}
-                  onPointerDown={() => {
-                    sliderSnapshot.current = frames;
-                  }}
-                  onChange={(e) => {
-                    const newScale = Number(e.target.value);
-                    updateSelectedLayersTransform({ scale: newScale }, false);
-                  }}
-                  onPointerUp={() => {
-                    if (sliderSnapshot.current) {
-                      recordState(sliderSnapshot.current);
-                      sliderSnapshot.current = null;
+              <div className="quick-transform-group size-input-group">
+                <span className="mini-label">Size</span>
+                <label className="dimension-input">
+                  <span>W</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={Math.round((primaryLayer.width * MAX_LAYER_SCALE) / 100)}
+                    value={Math.round(primaryLayerSize?.width || primaryLayer.width)}
+                    aria-label="Layer width in pixels"
+                    onFocus={() => {
+                      sliderSnapshot.current = frames;
+                    }}
+                    onChange={(event) =>
+                      updateSelectedLayerDimension('width', Number(event.target.value), false)
                     }
-                  }}
-                  aria-label="Layer scale percentage"
-                />
-                <span className="scale-value tabular-nums">{primaryLayer.transform.scale}%</span>
+                    onBlur={() => {
+                      if (sliderSnapshot.current) recordState(sliderSnapshot.current);
+                      sliderSnapshot.current = null;
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                  />
+                  <span>px</span>
+                </label>
+                <button
+                  type="button"
+                  className={`aspect-lock-button ${lockAspectRatio ? 'active' : ''}`}
+                  aria-label={lockAspectRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+                  title={lockAspectRatio ? 'Aspect ratio locked' : 'Aspect ratio unlocked'}
+                  aria-pressed={lockAspectRatio}
+                  onClick={() => setLockAspectRatio((locked) => !locked)}
+                >
+                  {lockAspectRatio ? <Link2 size={13} /> : <Unlink2 size={13} />}
+                </button>
+                <label className="dimension-input">
+                  <span>H</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={Math.round((primaryLayer.height * MAX_LAYER_SCALE) / 100)}
+                    value={Math.round(primaryLayerSize?.height || primaryLayer.height)}
+                    aria-label="Layer height in pixels"
+                    onFocus={() => {
+                      sliderSnapshot.current = frames;
+                    }}
+                    onChange={(event) =>
+                      updateSelectedLayerDimension('height', Number(event.target.value), false)
+                    }
+                    onBlur={() => {
+                      if (sliderSnapshot.current) recordState(sliderSnapshot.current);
+                      sliderSnapshot.current = null;
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur();
+                    }}
+                  />
+                  <span>px</span>
+                </label>
               </div>
 
               {isMultiSelected && (
@@ -1057,6 +1375,7 @@ export default function AnimationEditor({
             onPointerDown={handleStagePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
           >
             {/* Render Marquee Selection Box */}
             {marqueeBox && (
@@ -1083,9 +1402,7 @@ export default function AnimationEditor({
                 {activePaintLayers.map(({ layer, index: idx }) => {
                   if (!layer.transform.visible) return null;
                   const isSelected = validSelectedIndices.includes(idx);
-                  const s = (layer.transform.scale || 100) / 100;
-                  const w = layer.width * s;
-                  const h = layer.height * s;
+                  const { width: w, height: h } = getLayerDisplaySize(layer);
                   const ox = layer.transform.x || 0;
                   const oy = layer.transform.y || 0;
                   const fx = layer.transform.flipX ? -1 : 1;
@@ -1121,12 +1438,54 @@ export default function AnimationEditor({
                         }}
                       />
                       {isSelected && !playing && (
-                        <div className="layer-selection-outline" aria-hidden="true">
-                          <span className="handle-dot tl" />
-                          <span className="handle-dot tr" />
-                          <span className="handle-dot bl" />
-                          <span className="handle-dot br" />
-                        </div>
+                        <>
+                          <div className="layer-selection-outline">
+                            {(['tl', 'tr', 'bl', 'br'] as const).map((corner) => (
+                              <button
+                                key={corner}
+                                type="button"
+                                className={`handle-dot ${corner}`}
+                                aria-label={`Resize ${layer.name} from ${corner}`}
+                                title="Drag to resize proportionally"
+                                onPointerDown={(event) =>
+                                  handleResizePointerDown(event, idx, corner, 'corner')
+                                }
+                              />
+                            ))}
+                            {(
+                              [
+                                ['t', 'Resize height from top edge'],
+                                ['r', 'Resize width from right edge'],
+                                ['b', 'Resize height from bottom edge'],
+                                ['l', 'Resize width from left edge'],
+                              ] as const
+                            ).map(([edge, label]) => (
+                              <button
+                                key={edge}
+                                type="button"
+                                className={`handle-edge ${edge}`}
+                                aria-label={`${label} for ${layer.name}`}
+                                title={label}
+                                onPointerDown={(event) =>
+                                  handleResizePointerDown(event, idx, edge, 'edge')
+                                }
+                              />
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            className="layer-pivot-handle"
+                            style={{
+                              left: `${50 + (layer.transform.pivotX || 0) * 100}%`,
+                              top: `${50 + (layer.transform.pivotY || 0) * 100}%`,
+                            }}
+                            aria-label={`Move rotation pivot for ${layer.name}`}
+                            title="Drag to move rotation pivot"
+                            onPointerDown={(event) => handlePivotPointerDown(event, idx)}
+                          >
+                            <span />
+                          </button>
+                        </>
                       )}
                     </div>
                   );
@@ -1154,9 +1513,9 @@ export default function AnimationEditor({
                     {layersInPaintOrder(f.layers.map((layer, idx) => ({ layer, idx }))).map(
                       ({ layer, idx }) => {
                         if (!layer.transform.visible) return null;
-                        const s = (layer.transform.scale || 100) / 100;
-                        const w = (layer.width * s * 100) / cellWidth;
-                        const h = (layer.height * s * 100) / cellHeight;
+                        const displaySize = getLayerDisplaySize(layer);
+                        const w = (displaySize.width * 100) / cellWidth;
+                        const h = (displaySize.height * 100) / cellHeight;
                         const ox = ((layer.transform.x || 0) * 100) / cellWidth;
                         const oy = ((layer.transform.y || 0) * 100) / cellHeight;
                         const fx = layer.transform.flipX ? -1 : 1;
@@ -1208,7 +1567,10 @@ export default function AnimationEditor({
               <span>
                 Offset: X {primaryLayer.transform.x || 0}px · Y {primaryLayer.transform.y || 0}px
               </span>
-              <span>Scale: {primaryLayer.transform.scale}%</span>
+              <span>
+                Size: {Math.round(primaryLayerSize?.width || primaryLayer.width)} ×{' '}
+                {Math.round(primaryLayerSize?.height || primaryLayer.height)} px
+              </span>
               <span>Rot: {primaryLayer.transform.rotation || 0}°</span>
               <small className="drag-hint">
                 Tip: Click + drag on canvas to box-select multiple sprites (or Shift+Click)
@@ -1272,6 +1634,156 @@ export default function AnimationEditor({
               }}
             />
           </label>
+
+          <section className="animation-timeline" aria-label="Animation frames">
+            <div className="timeline-toolbar">
+              <div className="timeline-title">
+                <div>
+                  <h3>Timeline</h3>
+                  <span>
+                    Frame {safeActive + 1} of {count} · {delay} ms
+                  </span>
+                </div>
+              </div>
+
+              <fieldset
+                disabled={progress !== null}
+                className="frame-actions frame-context-actions"
+                aria-label={`Actions for frame ${safeActive + 1}`}
+              >
+                <span className="frame-actions-label">Selected frame</span>
+                <button
+                  type="button"
+                  className="timeline-icon-button"
+                  disabled={safeActive === 0}
+                  aria-label="Move selected frame left"
+                  title="Move frame left"
+                  onClick={() => moveFrame(-1)}
+                >
+                  <ArrowLeft size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="timeline-icon-button"
+                  disabled={safeActive === count - 1}
+                  aria-label="Move selected frame right"
+                  title="Move frame right"
+                  onClick={() => moveFrame(1)}
+                >
+                  <ArrowRight size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="timeline-icon-button"
+                  disabled={count >= 200}
+                  aria-label="Duplicate selected frame"
+                  title="Duplicate frame"
+                  onClick={duplicateActiveFrame}
+                >
+                  <Copy size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="timeline-icon-button danger"
+                  disabled={count <= 1}
+                  aria-label="Delete selected frame"
+                  title="Delete frame"
+                  onClick={removeActiveFrame}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </fieldset>
+
+              <fieldset
+                disabled={progress !== null}
+                className="frame-actions sequence-actions"
+                aria-label="Sequence actions"
+              >
+                <button
+                  type="button"
+                  className="timeline-text-button"
+                  onClick={() => updateFrames([...frames].reverse(), count - 1 - safeActive)}
+                >
+                  Reverse
+                </button>
+                <button
+                  type="button"
+                  className="timeline-icon-button"
+                  aria-label="Reset frame sequence"
+                  title="Reset sequence"
+                  onClick={resetFrameSequence}
+                >
+                  <RotateCcw size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="timeline-text-button btn-timeline-add"
+                  onClick={() => setShowLibrary(true)}
+                >
+                  <Plus size={14} /> Add frame
+                </button>
+              </fieldset>
+            </div>
+
+            <div
+              ref={frameStripRef}
+              className="frame-strip"
+              role="group"
+              aria-label="Frame sequence"
+            >
+              {frames.map((frame, frameIndex) => (
+                <button
+                  key={frame.id}
+                  type="button"
+                  data-frame-index={frameIndex}
+                  className={`frame-tile ${frameIndex === safeActive ? 'active' : ''}`}
+                  onClick={() => {
+                    setPlaying(false);
+                    setActive(frameIndex);
+                    setView('animation');
+                  }}
+                  aria-label={`Select animation frame ${frameIndex + 1}`}
+                  aria-pressed={frameIndex === safeActive}
+                >
+                  <span className="tile-preview-box checkerboard">
+                    {layersInPaintOrder(frame.layers).map((layer) => {
+                      if (!layer.transform.visible) return null;
+                      const displaySize = getLayerDisplaySize(layer);
+                      const width = (displaySize.width * 100) / cellWidth;
+                      const height = (displaySize.height * 100) / cellHeight;
+                      const offsetX = ((layer.transform.x || 0) * 100) / cellWidth;
+                      const offsetY = ((layer.transform.y || 0) * 100) / cellHeight;
+                      const flipX = layer.transform.flipX ? -1 : 1;
+                      const flipY = layer.transform.flipY ? -1 : 1;
+                      return (
+                        <span
+                          key={layer.id}
+                          className="tile-preview-layer"
+                          style={{
+                            left: `${50 + offsetX}%`,
+                            top: `${50 + offsetY}%`,
+                            width: `${width}%`,
+                            height: `${height}%`,
+                            transform: `translate(-50%, -50%) rotate(${layer.transform.rotation || 0}deg) scale(${flipX}, ${flipY})`,
+                            opacity: layer.transform.opacity ?? 1,
+                          }}
+                        >
+                          <img src={layer.url} alt="" />
+                        </span>
+                      );
+                    })}
+                    <strong>{String(frameIndex + 1).padStart(2, '0')}</strong>
+                    {frame.layers.length > 1 && (
+                      <span className="layer-count-badge" title={`${frame.layers.length} layers`}>
+                        {frame.layers.length}
+                      </span>
+                    )}
+                  </span>
+                  <small title={frame.name}>{frame.name}</small>
+                </button>
+              ))}
+            </div>
+          </section>
         </section>
 
         {/* Dedicated Layers Column */}
@@ -1521,115 +2033,53 @@ export default function AnimationEditor({
 
               {primaryLayer && (
                 <div className="transform-controls-grid">
-                  {/* Scale Control */}
+                  {/* Precise rotation and pivot controls */}
                   <div className="control-group">
-                    <div className="control-header">
-                      <label htmlFor="scale-slider">Scale: {primaryLayer.transform.scale}%</label>
-                    </div>
-                    <input
-                      id="scale-slider"
-                      type="range"
-                      min="10"
-                      max="400"
-                      value={primaryLayer.transform.scale}
-                      onPointerDown={() => {
-                        sliderSnapshot.current = frames;
-                      }}
-                      onChange={(e) => {
-                        const newScale = Number(e.target.value);
-                        updateSelectedLayersTransform({ scale: newScale }, false);
-                      }}
-                      onPointerUp={() => {
-                        if (sliderSnapshot.current) {
-                          recordState(sliderSnapshot.current);
+                    <label htmlFor="rotation-value">Precise rotation</label>
+                    <div className="precise-value-input">
+                      <input
+                        id="rotation-value"
+                        aria-label="Rotation in degrees"
+                        type="number"
+                        min="0"
+                        max="359"
+                        value={primaryLayer.transform.rotation || 0}
+                        onFocus={() => {
+                          sliderSnapshot.current = frames;
+                        }}
+                        onChange={(event) => {
+                          const newRotation = Number(event.target.value);
+                          updateSelectedLayersTransform(
+                            (transform, layer) =>
+                              rotateLayerAroundPivot({ ...layer, transform }, newRotation),
+                            false,
+                          );
+                        }}
+                        onBlur={() => {
+                          if (sliderSnapshot.current) recordState(sliderSnapshot.current);
                           sliderSnapshot.current = null;
-                        }
-                      }}
-                    />
-                    <div className="scale-preset-buttons">
-                      {[50, 100, 150, 200].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          className={`preset-btn ${primaryLayer.transform.scale === preset ? 'active' : ''}`}
-                          onClick={() => updateSelectedLayersTransform({ scale: preset })}
-                        >
-                          {preset}%
-                        </button>
-                      ))}
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') event.currentTarget.blur();
+                        }}
+                      />
+                      <span>°</span>
                     </div>
-                  </div>
-
-                  {/* Flip Controls */}
-                  <div className="control-group">
-                    <span className="control-label">Flip & orientation</span>
-                    <div className="button-pair">
-                      <button
-                        type="button"
-                        className={`sprite-button toggle-btn ${primaryLayer.transform.flipX ? 'active' : ''}`}
-                        onClick={() => updateSelectedLayersTransform((t) => ({ flipX: !t.flipX }))}
-                      >
-                        <FlipHorizontal2 size={15} />
-                        <span>Flip horizontal</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`sprite-button toggle-btn ${primaryLayer.transform.flipY ? 'active' : ''}`}
-                        onClick={() => updateSelectedLayersTransform((t) => ({ flipY: !t.flipY }))}
-                      >
-                        <FlipVertical2 size={15} />
-                        <span>Flip vertical</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Rotation Control */}
-                  <div className="control-group">
-                    <label htmlFor="rotation-slider">
-                      Rotation: {primaryLayer.transform.rotation || 0}°
-                    </label>
-                    <input
-                      id="rotation-slider"
-                      type="range"
-                      min="0"
-                      max="360"
-                      value={primaryLayer.transform.rotation || 0}
-                      onPointerDown={() => {
-                        sliderSnapshot.current = frames;
-                      }}
-                      onChange={(e) => {
-                        const newRot = Number(e.target.value);
-                        updateSelectedLayersTransform({ rotation: newRot }, false);
-                      }}
-                      onPointerUp={() => {
-                        if (sliderSnapshot.current) {
-                          recordState(sliderSnapshot.current);
-                          sliderSnapshot.current = null;
-                        }
-                      }}
-                    />
-                    <div className="button-pair mt-1">
+                    <div className="pivot-control-row">
+                      <div>
+                        <span className="control-label">Rotation pivot</span>
+                        <small>
+                          Drag the target on the sprite. Rotation keeps that point fixed.
+                        </small>
+                      </div>
                       <button
                         type="button"
                         className="sprite-button"
                         onClick={() =>
-                          updateSelectedLayersTransform((t) => ({
-                            rotation: (t.rotation - 90 + 360) % 360,
-                          }))
+                          updateSelectedLayersTransform({ pivotX: 0, pivotY: 0 })
                         }
                       >
-                        <RotateCcw size={14} /> -90°
-                      </button>
-                      <button
-                        type="button"
-                        className="sprite-button"
-                        onClick={() =>
-                          updateSelectedLayersTransform((t) => ({
-                            rotation: (t.rotation + 90) % 360,
-                          }))
-                        }
-                      >
-                        <RotateCw size={14} /> +90°
+                        Center pivot
                       </button>
                     </div>
                   </div>
@@ -1754,13 +2204,6 @@ export default function AnimationEditor({
                       onClick={() => applyTransformToAllFrames(primaryLayer.transform)}
                     >
                       <Copy size={13} /> Apply transform to all frames
-                    </button>
-                    <button
-                      type="button"
-                      className="sprite-button w-full"
-                      onClick={resetSelectedLayersTransform}
-                    >
-                      <RotateCcw size={13} /> Reset layer edits
                     </button>
                   </div>
                 </div>
@@ -2028,124 +2471,6 @@ export default function AnimationEditor({
         )}
       </div>
 
-      {/* Full width bottom timeline */}
-      <section className="animation-timeline" aria-label="Animation frames">
-        <div className="timeline-heading">
-          <div>
-            <h3>Frame sequence</h3>
-            <p>Select a frame, then move, duplicate or remove it.</p>
-          </div>
-          <fieldset disabled={progress !== null} className="frame-actions">
-            <button
-              type="button"
-              className="sprite-button"
-              disabled={safeActive === 0}
-              aria-label="Move frame earlier"
-              onClick={() => moveFrame(-1)}
-            >
-              <ArrowLeft size={16} />
-            </button>
-            <button
-              type="button"
-              className="sprite-button"
-              disabled={safeActive === count - 1}
-              aria-label="Move frame later"
-              onClick={() => moveFrame(1)}
-            >
-              <ArrowRight size={16} />
-            </button>
-            <button
-              type="button"
-              className="sprite-button"
-              disabled={count >= 200}
-              onClick={() => {
-                const current = frames[safeActive];
-                const clone: StudioFrame = {
-                  ...current,
-                  id: `frame-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  name: `${current.name}_copy`,
-                  layers: current.layers.map((l) => ({
-                    ...l,
-                    id: `layer-${Math.random().toString(36).slice(2, 9)}`,
-                    transform: { ...l.transform },
-                  })),
-                };
-                const next = [...frames];
-                next.splice(safeActive + 1, 0, clone);
-                updateFrames(next, safeActive + 1);
-              }}
-            >
-              <Copy size={16} /> Duplicate
-            </button>
-            <button
-              type="button"
-              className="sprite-button"
-              disabled={count <= 1}
-              onClick={() => {
-                if (count <= 1) return;
-                const next = frames.filter((_, i) => i !== safeActive);
-                updateFrames(next, Math.max(0, safeActive - 1));
-              }}
-            >
-              <Trash2 size={16} /> Remove
-            </button>
-            <button
-              type="button"
-              className="sprite-button"
-              onClick={() => updateFrames([...frames].reverse(), count - 1 - safeActive)}
-            >
-              Reverse
-            </button>
-            <button
-              type="button"
-              className="sprite-button"
-              onClick={() =>
-                updateFrames(
-                  initialFrames.map((f, i) => createFrameFromItem(f, i)),
-                  0,
-                )
-              }
-            >
-              Reset sequence
-            </button>
-            <button
-              type="button"
-              className="sprite-button btn-timeline-add"
-              onClick={() => setShowLibrary(true)}
-            >
-              <Plus size={16} /> + Add from library
-            </button>
-          </fieldset>
-        </div>
-
-        <div className="frame-strip">
-          {frames.map((frame, i) => (
-            <button
-              key={frame.id}
-              type="button"
-              className={`frame-tile ${i === safeActive ? 'active' : ''}`}
-              onClick={() => {
-                setPlaying(false);
-                setActive(i);
-                setView('animation');
-              }}
-              aria-label={`Select animation frame ${i + 1}`}
-              aria-pressed={i === safeActive}
-            >
-              <span className="tile-preview-box checkerboard">
-                <img src={frame.layers[0]?.url} alt="" />
-              </span>
-              <strong>{String(i + 1).padStart(2, '0')}</strong>
-              <div className="frame-tile-meta">
-                <small title={frame.name}>{frame.name}</small>
-                {frame.layers.length > 1 && (
-                  <span className="layer-count-badge">{frame.layers.length} layers</span>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
