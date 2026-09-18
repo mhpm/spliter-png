@@ -93,7 +93,7 @@
 @layer components {
   /* Header & Navigation */
   .app-header {
-    @apply sticky top-0 z-40 flex items-center gap-5 border-b border-line px-8;
+    @apply flex items-center gap-5 border-b border-line px-8;
     height: 72px;
     background: rgba(255, 255, 255, 0.82);
     backdrop-filter: blur(16px);
@@ -473,7 +473,7 @@
 
   /* Workspace Tabs */
   .workspace-tabs {
-    @apply sticky top-[72px] z-30 flex items-center gap-4 px-8;
+    @apply flex items-center gap-4 px-8;
     background: rgba(255, 255, 255, 0.78);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -1398,7 +1398,6 @@
     border-radius: 10px;
   }
   .workspace-tabs {
-    top: 64px;
     padding: 0 16px;
     gap: 12px;
   }
