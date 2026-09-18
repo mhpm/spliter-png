@@ -4,6 +4,7 @@ import {
   type StudioFrame,
   isFrameUntouched,
   calculateFrameDimensions,
+  layersInPaintOrder,
 } from './model';
 
 export async function transformSprite(original: FrameSize & { blob: Blob }, edit: SpriteEdit) {
@@ -53,12 +54,13 @@ export async function compositeFrame(
     canvas.width = width;
     canvas.height = height;
   }
-  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+  const ctx = canvas.getContext('2d') as
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
   if (!ctx) throw new Error('Could not create canvas context for composite frame.');
 
   const cx = width / 2;
   const cy = height / 2;
-  const visibleLayers = frame.layers.filter((l) => l.transform.visible);
+  const visibleLayers = layersInPaintOrder(frame.layers).filter((l) => l.transform.visible);
 
   for (const layer of visibleLayers) {
     const bitmap = await createImageBitmap(layer.blob);
@@ -105,4 +107,3 @@ export async function compositeFrame(
 
   return { width, height, blob };
 }
-

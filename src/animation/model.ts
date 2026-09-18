@@ -80,6 +80,14 @@ export interface StudioFrame {
   layers: FrameLayer[];
 }
 
+/**
+ * The inspector stores layers from front to back, while DOM and Canvas paint
+ * later entries over earlier ones. Return the back-to-front paint sequence.
+ */
+export function layersInPaintOrder<T>(layers: readonly T[]): T[] {
+  return [...layers].reverse();
+}
+
 export function isDefaultTransform(t: LayerTransform): boolean {
   return (
     t.scale === 100 &&
@@ -172,4 +180,3 @@ export function createFrameFromItem(
     layers: [createLayerFromItem(item)],
   };
 }
-

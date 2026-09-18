@@ -12,6 +12,7 @@ import {
   EyeOff,
   FlipHorizontal2,
   FlipVertical2,
+  GripVertical,
   Layers,
   Pause,
   Play,
@@ -20,6 +21,8 @@ import {
   RotateCcw,
   RotateCw,
   Search,
+  Settings2,
+  Sliders,
   Sparkles,
   Trash2,
   Undo2,
@@ -36,6 +39,7 @@ import {
   createFrameFromItem,
   createLayerFromItem,
   isFrameUntouched,
+  layersInPaintOrder,
   sheetLayout,
 } from './model';
 import { compositeFrame } from './transform';
@@ -72,6 +76,11 @@ export default function AnimationEditor({
   const [error, setError] = useState('');
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryFilter, setLibraryFilter] = useState('');
+  const [draggedLayerIdx, setDraggedLayerIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<'before' | 'after' | null>(null);
+  const [settingsTab, setSettingsTab] = useState<'sprite' | 'animation'>('sprite');
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Undo / Redo stacks
   const [undoStack, setUndoStack] = useState<StudioFrame[][]>([]);
@@ -107,6 +116,10 @@ export default function AnimationEditor({
   const safeActive = Math.min(Math.max(0, active), Math.max(0, count - 1));
   const activeFrame = frames[safeActive] || frames[0];
   const activeLayers = useMemo(() => activeFrame?.layers || [], [activeFrame]);
+  const activePaintLayers = useMemo(
+    () => layersInPaintOrder(activeLayers.map((layer, index) => ({ layer, index }))),
+    [activeLayers],
+  );
 
   // Guaranteed valid selected layer indices
   const validSelectedIndices = useMemo(() => {
@@ -143,6 +156,17 @@ export default function AnimationEditor({
   const delay = Math.round(100 / fps) * 10;
 
   useEffect(() => () => worker.current?.terminate(), []);
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setShowExportModal(false);
+      }
+    }
+    if (showExportModal) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [showExportModal]);
   useEffect(() => {
     if (!playing) return;
     const timer = window.setTimeout(() => {
@@ -343,6 +367,102 @@ export default function AnimationEditor({
     setSelectedLayerIndices([toIdx]);
   }
 
+  function handleLayerDragStart(e: React.DragEvent, idx: number) {
+    setDraggedLayerIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+    if (!validSelectedIndices.includes(idx)) {
+      setSelectedLayerIndices([idx]);
+    }
+  }
+
+  function handleLayerDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedLayerIdx === null || draggedLayerIdx === idx) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midPoint = rect.top + rect.height / 2;
+    const pos = e.clientY < midPoint ? 'before' : 'after';
+
+    if (dragOverIdx !== idx || dropPosition !== pos) {
+      setDragOverIdx(idx);
+      setDropPosition(pos);
+    }
+  }
+
+  function handleLayerDragLeave() {
+    // Keep target indication stable during drag over card children
+  }
+
+  function handleLayerDrop(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    if (draggedLayerIdx === null || draggedLayerIdx === idx) {
+      setDraggedLayerIdx(null);
+      setDragOverIdx(null);
+      setDropPosition(null);
+      return;
+    }
+
+    let targetIdx = idx;
+    if (draggedLayerIdx < idx) {
+      targetIdx = dropPosition === 'before' ? Math.max(0, idx - 1) : idx;
+    } else {
+      targetIdx = dropPosition === 'after' ? Math.min(activeLayers.length - 1, idx + 1) : idx;
+    }
+
+    moveLayerOrder(draggedLayerIdx, targetIdx);
+    setDraggedLayerIdx(null);
+    setDragOverIdx(null);
+    setDropPosition(null);
+  }
+
+  function handleLayerDragEnd() {
+    setDraggedLayerIdx(null);
+    setDragOverIdx(null);
+    setDropPosition(null);
+  }
+
+  function duplicateSingleLayer(layerIdx: number) {
+    recordState(frames);
+    const source = activeLayers[layerIdx];
+    if (!source) return;
+    const clone: FrameLayer = {
+      ...source,
+      id: `layer-${source.spriteId}-${Math.random().toString(36).slice(2, 9)}`,
+      name: `${source.name}_copy`,
+      transform: {
+        ...source.transform,
+        x: (source.transform.x || 0) + 12,
+        y: (source.transform.y || 0) + 12,
+      },
+    };
+    setFrames((prev) => {
+      const next = [...prev];
+      const targetFrame = { ...next[safeActive] };
+      const layers = [...targetFrame.layers];
+      layers.splice(layerIdx + 1, 0, clone);
+      targetFrame.layers = layers;
+      next[safeActive] = targetFrame;
+      return next;
+    });
+    setSelectedLayerIndices([layerIdx + 1]);
+  }
+
+  function removeSingleLayer(layerIdx: number) {
+    if (activeLayers.length <= 1) return;
+    recordState(frames);
+    setFrames((prev) => {
+      const next = [...prev];
+      const targetFrame = { ...next[safeActive] };
+      const layers = targetFrame.layers.filter((_, i) => i !== layerIdx);
+      targetFrame.layers = layers.length > 0 ? layers : [targetFrame.layers[0]];
+      next[safeActive] = targetFrame;
+      return next;
+    });
+    setSelectedLayerIndices([Math.max(0, layerIdx - 1)]);
+  }
+
   function toggleLayerVisibility(layerIdx: number) {
     recordState(frames);
     setFrames((prev) => {
@@ -454,17 +574,14 @@ export default function AnimationEditor({
       if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
         dragRef.current.hasMoved = true;
       }
-      updateSelectedLayersTransform(
-        (t, _, idx) => {
-          const init = dragRef.current?.initialPositions.get(idx);
-          if (!init) return t;
-          return {
-            x: init.x + dx,
-            y: init.y + dy,
-          };
-        },
-        false,
-      );
+      updateSelectedLayersTransform((t, _, idx) => {
+        const init = dragRef.current?.initialPositions.get(idx);
+        if (!init) return t;
+        return {
+          x: init.x + dx,
+          y: init.y + dy,
+        };
+      }, false);
       return;
     }
 
@@ -667,7 +784,10 @@ export default function AnimationEditor({
       2,
     );
 
-    download(new Blob([json], { type: 'application/json' }), `${safeStem(name || 'my-animation')}.json`);
+    download(
+      new Blob([json], { type: 'application/json' }),
+      `${safeStem(name || 'my-animation')}.json`,
+    );
   }
 
   const filteredLibrary = allAvailableSprites.filter((item) =>
@@ -675,17 +795,10 @@ export default function AnimationEditor({
   );
 
   return (
-    <div
-      className="animation-workspace-view"
-      role="dialog"
-      aria-label="Animation studio"
-    >
+    <div className="animation-workspace-view" role="dialog" aria-label="Animation studio">
       {/* Extracted Sprite Library Modal Backdrop & Dialog */}
       {showLibrary && (
-        <div
-          className="sprite-library-backdrop"
-          onClick={() => setShowLibrary(false)}
-        >
+        <div className="sprite-library-backdrop" onClick={() => setShowLibrary(false)}>
           <div
             className="sprite-library-drawer sprite-library-modal"
             role="region"
@@ -815,17 +928,22 @@ export default function AnimationEditor({
             <Sparkles size={15} />
             <span>Sprite library ({allAvailableSprites.length})</span>
           </button>
+
+          <button
+            type="button"
+            className="sprite-button sprite-primary btn-header-export"
+            onClick={() => setShowExportModal(true)}
+          >
+            <Download size={15} />
+            <span>Export</span>
+          </button>
         </div>
       </header>
 
       <div className="animation-body">
         <section className="animation-preview-panel" aria-label="Animation preview">
-
           <div className="animation-view-switch">
-            <button
-              aria-pressed={view === 'animation'}
-              onClick={() => setView('animation')}
-            >
+            <button aria-pressed={view === 'animation'} onClick={() => setView('animation')}>
               Animation
             </button>
             <button
@@ -850,9 +968,7 @@ export default function AnimationEditor({
                   type="button"
                   className={`sprite-button mini-btn ${primaryLayer.transform.flipX ? 'active' : ''}`}
                   title="Flip horizontal"
-                  onClick={() =>
-                    updateSelectedLayersTransform((t) => ({ flipX: !t.flipX }))
-                  }
+                  onClick={() => updateSelectedLayersTransform((t) => ({ flipX: !t.flipX }))}
                 >
                   <FlipHorizontal2 size={15} /> Flip H
                 </button>
@@ -860,9 +976,7 @@ export default function AnimationEditor({
                   type="button"
                   className={`sprite-button mini-btn ${primaryLayer.transform.flipY ? 'active' : ''}`}
                   title="Flip vertical"
-                  onClick={() =>
-                    updateSelectedLayersTransform((t) => ({ flipY: !t.flipY }))
-                  }
+                  onClick={() => updateSelectedLayersTransform((t) => ({ flipY: !t.flipY }))}
                 >
                   <FlipVertical2 size={15} /> Flip V
                 </button>
@@ -966,7 +1080,7 @@ export default function AnimationEditor({
                   height: `${cellHeight}px`,
                 }}
               >
-                {activeLayers.map((layer, idx) => {
+                {activePaintLayers.map(({ layer, index: idx }) => {
                   if (!layer.transform.visible) return null;
                   const isSelected = validSelectedIndices.includes(idx);
                   const s = (layer.transform.scale || 100) / 100;
@@ -1037,41 +1151,43 @@ export default function AnimationEditor({
                       setView('animation');
                     }}
                   >
-                    {f.layers.map((layer, idx) => {
-                      if (!layer.transform.visible) return null;
-                      const s = (layer.transform.scale || 100) / 100;
-                      const w = (layer.width * s * 100) / cellWidth;
-                      const h = (layer.height * s * 100) / cellHeight;
-                      const ox = ((layer.transform.x || 0) * 100) / cellWidth;
-                      const oy = ((layer.transform.y || 0) * 100) / cellHeight;
-                      const fx = layer.transform.flipX ? -1 : 1;
-                      const fy = layer.transform.flipY ? -1 : 1;
-                      return (
-                        <div
-                          key={layer.id || idx}
-                          style={{
-                            position: 'absolute',
-                            left: '50%',
-                            top: '50%',
-                            width: `${w}%`,
-                            height: `${h}%`,
-                            transform: `translate(-50%, -50%) translate(${ox}%, ${oy}%) rotate(${layer.transform.rotation || 0}deg) scale(${fx}, ${fy})`,
-                            opacity: layer.transform.opacity ?? 1,
-                          }}
-                        >
-                          <img
-                            src={layer.url}
-                            alt=""
+                    {layersInPaintOrder(f.layers.map((layer, idx) => ({ layer, idx }))).map(
+                      ({ layer, idx }) => {
+                        if (!layer.transform.visible) return null;
+                        const s = (layer.transform.scale || 100) / 100;
+                        const w = (layer.width * s * 100) / cellWidth;
+                        const h = (layer.height * s * 100) / cellHeight;
+                        const ox = ((layer.transform.x || 0) * 100) / cellWidth;
+                        const oy = ((layer.transform.y || 0) * 100) / cellHeight;
+                        const fx = layer.transform.flipX ? -1 : 1;
+                        const fy = layer.transform.flipY ? -1 : 1;
+                        return (
+                          <div
+                            key={layer.id || idx}
                             style={{
-                              width: '100%',
-                              height: '100%',
-                              display: 'block',
-                              imageRendering: 'pixelated',
+                              position: 'absolute',
+                              left: '50%',
+                              top: '50%',
+                              width: `${w}%`,
+                              height: `${h}%`,
+                              transform: `translate(-50%, -50%) translate(${ox}%, ${oy}%) rotate(${layer.transform.rotation || 0}deg) scale(${fx}, ${fy})`,
+                              opacity: layer.transform.opacity ?? 1,
                             }}
-                          />
-                        </div>
-                      );
-                    })}
+                          >
+                            <img
+                              src={layer.url}
+                              alt=""
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                display: 'block',
+                                imageRendering: 'pixelated',
+                              }}
+                            />
+                          </div>
+                        );
+                      },
+                    )}
                   </button>
                 ))}
               </div>
@@ -1099,127 +1215,6 @@ export default function AnimationEditor({
               </small>
             </div>
           )}
-
-          {/* Frame Layers Strip */}
-          <div className="frame-layers-panel">
-            <div className="layers-panel-header">
-              <div className="layers-title">
-                <Layers size={15} />
-                <span>
-                  Layers in Frame {safeActive + 1} ({activeLayers.length})
-                </span>
-                {activeLayers.length > 1 && (
-                  <button
-                    type="button"
-                    className="chip-btn select-all-btn"
-                    onClick={() => setSelectedLayerIndices(activeLayers.map((_, i) => i))}
-                  >
-                    Select all
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                className="sprite-button mini-btn btn-add-sprite-layer"
-                onClick={() => setShowLibrary(true)}
-              >
-                <Plus size={14} /> Combine another sprite
-              </button>
-            </div>
-
-            <div className="layers-chips-list">
-              {activeLayers.map((layer, idx) => {
-                const isSelected = validSelectedIndices.includes(idx);
-                return (
-                  <div
-                    key={layer.id}
-                    className={`layer-chip ${isSelected ? 'active selected' : ''}`}
-                    onClick={(e) => {
-                      if (e.shiftKey || e.ctrlKey) {
-                        if (validSelectedIndices.includes(idx)) {
-                          if (validSelectedIndices.length > 1) {
-                            setSelectedLayerIndices(validSelectedIndices.filter((i) => i !== idx));
-                          }
-                        } else {
-                          setSelectedLayerIndices([...validSelectedIndices, idx]);
-                        }
-                      } else {
-                        setSelectedLayerIndices([idx]);
-                      }
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="chip-vis-btn"
-                      title={layer.transform.visible ? 'Hide layer' : 'Show layer'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleLayerVisibility(idx);
-                      }}
-                    >
-                      {layer.transform.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-                    </button>
-                    <span className="chip-thumb checkerboard">
-                      <img src={layer.url} alt="" />
-                    </span>
-                    <span className="chip-name" title={layer.name}>
-                      {layer.name}
-                    </span>
-                    <div className="chip-actions">
-                      <button
-                        type="button"
-                        className="chip-btn"
-                        disabled={idx === 0}
-                        title="Send backward"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveLayerOrder(idx, idx - 1);
-                        }}
-                      >
-                        <ArrowLeft size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        className="chip-btn"
-                        disabled={idx === activeLayers.length - 1}
-                        title="Bring forward"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveLayerOrder(idx, idx + 1);
-                        }}
-                      >
-                        <ArrowRight size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        className="chip-btn"
-                        title="Duplicate layer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          duplicateSelectedLayers();
-                        }}
-                      >
-                        <Copy size={11} />
-                      </button>
-                      {activeLayers.length > 1 && (
-                        <button
-                          type="button"
-                          className="chip-btn delete-chip-btn"
-                          title="Delete selected layer(s)"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeSelectedLayers();
-                          }}
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
           {/* Playback Controls & Frame Scrubber */}
           <div className="animation-playback">
@@ -1279,405 +1274,758 @@ export default function AnimationEditor({
           </label>
         </section>
 
-        {/* Sidebar Controls */}
-        <aside className="animation-settings">
-          {/* Sprite Transformation Section */}
-          <div className="sidebar-section sprite-transform-section">
-            <div className="section-title">
-              <h4>Sprite manipulation</h4>
-              <p>
-                Editing: <strong>{isMultiSelected ? `${validSelectedIndices.length} layers selected` : primaryLayer?.name}</strong>
-              </p>
-            </div>
-
-            {primaryLayer && (
-              <div className="transform-controls-grid">
-                {/* Scale Control */}
-                <div className="control-group">
-                  <div className="control-header">
-                    <label htmlFor="scale-slider">Scale: {primaryLayer.transform.scale}%</label>
-                  </div>
-                  <input
-                    id="scale-slider"
-                    type="range"
-                    min="10"
-                    max="400"
-                    value={primaryLayer.transform.scale}
-                    onPointerDown={() => {
-                      sliderSnapshot.current = frames;
-                    }}
-                    onChange={(e) => {
-                      const newScale = Number(e.target.value);
-                      updateSelectedLayersTransform({ scale: newScale }, false);
-                    }}
-                    onPointerUp={() => {
-                      if (sliderSnapshot.current) {
-                        recordState(sliderSnapshot.current);
-                        sliderSnapshot.current = null;
-                      }
-                    }}
-                  />
-                  <div className="scale-preset-buttons">
-                    {[50, 100, 150, 200].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        className={`preset-btn ${primaryLayer.transform.scale === preset ? 'active' : ''}`}
-                        onClick={() => updateSelectedLayersTransform({ scale: preset })}
-                      >
-                        {preset}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Flip Controls */}
-                <div className="control-group">
-                  <span className="control-label">Flip & orientation</span>
-                  <div className="button-pair">
-                    <button
-                      type="button"
-                      className={`sprite-button toggle-btn ${primaryLayer.transform.flipX ? 'active' : ''}`}
-                      onClick={() =>
-                        updateSelectedLayersTransform((t) => ({ flipX: !t.flipX }))
-                      }
-                    >
-                      <FlipHorizontal2 size={15} />
-                      <span>Flip horizontal</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`sprite-button toggle-btn ${primaryLayer.transform.flipY ? 'active' : ''}`}
-                      onClick={() =>
-                        updateSelectedLayersTransform((t) => ({ flipY: !t.flipY }))
-                      }
-                    >
-                      <FlipVertical2 size={15} />
-                      <span>Flip vertical</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Rotation Control */}
-                <div className="control-group">
-                  <label htmlFor="rotation-slider">Rotation: {primaryLayer.transform.rotation || 0}°</label>
-                  <input
-                    id="rotation-slider"
-                    type="range"
-                    min="0"
-                    max="360"
-                    value={primaryLayer.transform.rotation || 0}
-                    onPointerDown={() => {
-                      sliderSnapshot.current = frames;
-                    }}
-                    onChange={(e) => {
-                      const newRot = Number(e.target.value);
-                      updateSelectedLayersTransform({ rotation: newRot }, false);
-                    }}
-                    onPointerUp={() => {
-                      if (sliderSnapshot.current) {
-                        recordState(sliderSnapshot.current);
-                        sliderSnapshot.current = null;
-                      }
-                    }}
-                  />
-                  <div className="button-pair mt-1">
-                    <button
-                      type="button"
-                      className="sprite-button"
-                      onClick={() =>
-                        updateSelectedLayersTransform((t) => ({
-                          rotation: (t.rotation - 90 + 360) % 360,
-                        }))
-                      }
-                    >
-                      <RotateCcw size={14} /> -90°
-                    </button>
-                    <button
-                      type="button"
-                      className="sprite-button"
-                      onClick={() =>
-                        updateSelectedLayersTransform((t) => ({
-                          rotation: (t.rotation + 90) % 360,
-                        }))
-                      }
-                    >
-                      <RotateCw size={14} /> +90°
-                    </button>
-                  </div>
-                </div>
-
-                {/* Position Offset Control */}
-                <div className="control-group">
-                  <span className="control-label">Position offset (X, Y px)</span>
-                  <div className="offset-inputs-row">
-                    <div className="offset-input">
-                      <span>X</span>
-                      <input
-                        type="number"
-                        value={primaryLayer.transform.x || 0}
-                        onChange={(e) =>
-                          updateSelectedLayersTransform({ x: Number(e.target.value) })
-                        }
-                      />
-                    </div>
-                    <div className="offset-input">
-                      <span>Y</span>
-                      <input
-                        type="number"
-                        value={primaryLayer.transform.y || 0}
-                        onChange={(e) =>
-                          updateSelectedLayersTransform({ y: Number(e.target.value) })
-                        }
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      className="sprite-button mini-btn"
-                      onClick={() => updateSelectedLayersTransform({ x: 0, y: 0 })}
-                    >
-                      Center
-                    </button>
-                  </div>
-
-                  {/* Nudge pad */}
-                  <div className="nudge-pad">
-                    <div className="nudge-row">
-                      <button
-                        type="button"
-                        className="nudge-btn"
-                        title="Nudge up"
-                        onClick={() =>
-                          updateSelectedLayersTransform((t) => ({ y: (t.y || 0) - 2 }))
-                        }
-                      >
-                        <ArrowUp size={13} />
-                      </button>
-                    </div>
-                    <div className="nudge-row">
-                      <button
-                        type="button"
-                        className="nudge-btn"
-                        title="Nudge left"
-                        onClick={() =>
-                          updateSelectedLayersTransform((t) => ({ x: (t.x || 0) - 2 }))
-                        }
-                      >
-                        <ArrowLeft size={13} />
-                      </button>
-                      <span className="nudge-center-dot" />
-                      <button
-                        type="button"
-                        className="nudge-btn"
-                        title="Nudge right"
-                        onClick={() =>
-                          updateSelectedLayersTransform((t) => ({ x: (t.x || 0) + 2 }))
-                        }
-                      >
-                        <ArrowRight size={13} />
-                      </button>
-                    </div>
-                    <div className="nudge-row">
-                      <button
-                        type="button"
-                        className="nudge-btn"
-                        title="Nudge down"
-                        onClick={() =>
-                          updateSelectedLayersTransform((t) => ({ y: (t.y || 0) + 2 }))
-                        }
-                      >
-                        <ArrowDown size={13} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Opacity Control */}
-                <div className="control-group">
-                  <label htmlFor="opacity-slider">
-                    Opacity: {Math.round((primaryLayer.transform.opacity ?? 1) * 100)}%
-                  </label>
-                  <input
-                    id="opacity-slider"
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={Math.round((primaryLayer.transform.opacity ?? 1) * 100)}
-                    onPointerDown={() => {
-                      sliderSnapshot.current = frames;
-                    }}
-                    onChange={(e) => {
-                      const newOpacity = Number(e.target.value) / 100;
-                      updateSelectedLayersTransform({ opacity: newOpacity }, false);
-                    }}
-                    onPointerUp={() => {
-                      if (sliderSnapshot.current) {
-                        recordState(sliderSnapshot.current);
-                        sliderSnapshot.current = null;
-                      }
-                    }}
-                  />
-                </div>
-
-                {/* Batch Actions */}
-                <div className="transform-batch-actions">
-                  <button
-                    type="button"
-                    className="sprite-button w-full"
-                    onClick={() => applyTransformToAllFrames(primaryLayer.transform)}
-                  >
-                    <Copy size={13} /> Apply transform to all frames
-                  </button>
-                  <button
-                    type="button"
-                    className="sprite-button w-full"
-                    onClick={resetSelectedLayersTransform}
-                  >
-                    <RotateCcw size={13} /> Reset layer edits
-                  </button>
+        {/* Dedicated Layers Column */}
+        <aside className="animation-layers-sidebar" aria-label="Animation layers">
+          <div className="layers-sidebar-panel">
+            <div className="layers-section-header">
+              <div className="layers-title-row">
+                <div className="layers-title">
+                  <Layers size={16} />
+                  <h4>
+                    Layers in Frame {safeActive + 1} ({activeLayers.length})
+                  </h4>
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Animation Sequence & Export Settings */}
-          <div className="sidebar-section animation-config-section">
-            <div className="section-title">
-              <h4>Animation settings</h4>
-            </div>
-
-            <div className="setting-field">
-              <label htmlFor="anim-name">File name</label>
-              <input
-                id="anim-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="my-animation"
-              />
-            </div>
-
-            <div className="setting-field">
-              <label htmlFor="anim-fps">Speed · {fps} FPS</label>
-              <input
-                id="anim-fps"
-                aria-label="Frames per second"
-                type="range"
-                min="1"
-                max="60"
-                value={fps}
-                onChange={(e) => setFps(Number(e.target.value))}
-              />
-            </div>
-
-            <div className="setting-field checkbox-field">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={loop}
-                  onChange={(e) => setLoop(e.target.checked)}
-                />
-                Loop animation
-              </label>
-            </div>
-
-            <div className="setting-row">
-              <div className="setting-field">
-                <label htmlFor="anim-cols">Columns</label>
-                <input
-                  id="anim-cols"
-                  type="number"
-                  min="1"
-                  max={count}
-                  value={actualColumns}
-                  onChange={(e) => setColumns(Math.max(1, Number(e.target.value)))}
-                />
-              </div>
-              <div className="setting-field">
-                <label htmlFor="anim-pad">Padding (px)</label>
-                <input
-                  id="anim-pad"
-                  type="number"
-                  min="0"
-                  max="64"
-                  value={padding}
-                  onChange={(e) => setPadding(Math.max(0, Number(e.target.value)))}
-                />
-              </div>
-            </div>
-
-            <div className="setting-field">
-              <label htmlFor="anim-align">Frame alignment</label>
-              <select
-                id="anim-align"
-                value={alignment}
-                onChange={(e) => setAlignment(e.target.value as 'center' | 'bottom')}
-              >
-                <option value="bottom">Bottom center (walking sprites)</option>
-                <option value="center">True center (effects, items)</option>
-              </select>
-            </div>
-
-            <p className="alignment-hint">
-              Equal-sized cells keep frames aligned. Sprites keep their current size.
-            </p>
-
-            {layout && (
-              <div className="sheet-dimensions-info">
-                <span>
-                  Cell: {cellWidth} × {cellHeight} px
-                </span>
-                <span>
-                  Sheet: {layout.width} × {layout.height} px · {actualColumns} × {layout.rows}
-                </span>
-              </div>
-            )}
-
-            {layoutError && <p className="error-text">{layoutError}</p>}
-            {error && <p className="error-text">{error}</p>}
-
-            {progress !== null && (
-              <div className="export-progress">
-                <progress max={100} value={progress} />
-                <span>Exporting… {progress}%</span>
-                <button type="button" className="mini-btn" onClick={cancelExport}>
-                  Cancel
+              <div className="layers-actions-bar">
+                <button
+                  type="button"
+                  className="sprite-button mini-btn btn-add-sprite-layer"
+                  onClick={() => setShowLibrary(true)}
+                >
+                  <Plus size={14} /> Combine another sprite
                 </button>
+                {activeLayers.length > 1 && (
+                  <button
+                    type="button"
+                    className="chip-btn select-all-btn"
+                    onClick={() => setSelectedLayerIndices(activeLayers.map((_, i) => i))}
+                  >
+                    Select all
+                  </button>
+                )}
+                {isMultiSelected && (
+                  <>
+                    <button
+                      type="button"
+                      className="chip-btn"
+                      title="Duplicate selected layers"
+                      onClick={duplicateSelectedLayers}
+                    >
+                      <Copy size={11} /> Clone
+                    </button>
+                    {activeLayers.length > validSelectedIndices.length && (
+                      <button
+                        type="button"
+                        className="chip-btn delete-chip-btn"
+                        title="Delete selected layers"
+                        onClick={removeSelectedLayers}
+                      >
+                        <Trash2 size={11} /> Delete
+                      </button>
+                    )}
+                    <span className="layers-selected-tag">
+                      {validSelectedIndices.length} layers selected
+                    </span>
+                  </>
+                )}
               </div>
-            )}
-
-            <div className="export-actions">
-              <button
-                type="button"
-                className="sprite-button sprite-primary w-full"
-                disabled={!layout || progress !== null}
-                onClick={() => exportImage('png')}
-              >
-                <Download size={16} /> Download spritesheet PNG
-              </button>
-              <button
-                type="button"
-                className="sprite-button w-full"
-                disabled={!layout || progress !== null}
-                onClick={() => exportImage('gif')}
-              >
-                <Download size={16} /> Download animated GIF
-              </button>
-              <button
-                type="button"
-                className="sprite-button w-full"
-                disabled={!layout || progress !== null}
-                onClick={exportMetadata}
-              >
-                Download frame data (JSON)
-              </button>
             </div>
 
-            <p className="export-hint">
-              PNG preserves full transparency. GIF uses up to 256 colors and hard transparency edges.
-            </p>
+            <div className="layers-container layers-list-rows">
+              {activeLayers.map((layer, idx) => {
+                const isSelected = validSelectedIndices.includes(idx);
+                const isDragging = draggedLayerIdx === idx;
+                const isDragOver = dragOverIdx === idx;
+                const posClass = isDragOver && dropPosition ? `drop-${dropPosition}` : '';
+
+                return (
+                  <div
+                    key={layer.id}
+                    className={`sidebar-layer-card ${isSelected ? 'active selected' : ''} ${isDragging ? 'is-dragging' : ''} ${posClass}`}
+                    draggable
+                    onDragStart={(e) => handleLayerDragStart(e, idx)}
+                    onDragOver={(e) => handleLayerDragOver(e, idx)}
+                    onDragLeave={handleLayerDragLeave}
+                    onDrop={(e) => handleLayerDrop(e, idx)}
+                    onDragEnd={handleLayerDragEnd}
+                    onClick={(e) => {
+                      if (e.shiftKey || e.ctrlKey) {
+                        if (validSelectedIndices.includes(idx)) {
+                          if (validSelectedIndices.length > 1) {
+                            setSelectedLayerIndices(validSelectedIndices.filter((i) => i !== idx));
+                          }
+                        } else {
+                          setSelectedLayerIndices([...validSelectedIndices, idx]);
+                        }
+                      } else {
+                        setSelectedLayerIndices([idx]);
+                      }
+                    }}
+                  >
+                    <div className="card-top-row">
+                      <div className="card-drag-pos">
+                        <span className="layer-drag-handle" title="Arrastrar para reacomodar">
+                          <GripVertical size={13} />
+                        </span>
+                        <span className="layer-pos-pill" title={`Posición ${idx + 1}`}>
+                          #{idx + 1}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="chip-vis-btn"
+                        title={layer.transform.visible ? 'Hide layer' : 'Show layer'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleLayerVisibility(idx);
+                        }}
+                      >
+                        {layer.transform.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                      </button>
+                    </div>
+
+                    <div className="card-body-row">
+                      <div className="card-thumb-wrapper checkerboard">
+                        <img src={layer.url} alt={layer.name} />
+                      </div>
+                      <div className="card-info">
+                        <span className="card-name" title={layer.name}>
+                          {layer.name}
+                        </span>
+                        <span className="card-meta">
+                          {layer.width}×{layer.height}
+                          {idx === 0
+                            ? ' · Front'
+                            : idx === activeLayers.length - 1
+                              ? ' · Back'
+                              : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="card-actions-row">
+                      <div className="card-move-btns">
+                        <button
+                          type="button"
+                          className="chip-btn"
+                          disabled={idx === 0}
+                          title="Bring layer forward"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveLayerOrder(idx, idx - 1);
+                          }}
+                        >
+                          <ArrowUp size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          className="chip-btn"
+                          disabled={idx === activeLayers.length - 1}
+                          title="Send layer backward"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveLayerOrder(idx, idx + 1);
+                          }}
+                        >
+                          <ArrowDown size={11} />
+                        </button>
+                      </div>
+
+                      <div className="card-util-btns">
+                        <button
+                          type="button"
+                          className="chip-btn"
+                          title="Duplicate layer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicateSingleLayer(idx);
+                          }}
+                        >
+                          <Copy size={11} />
+                        </button>
+                        {activeLayers.length > 1 && (
+                          <button
+                            type="button"
+                            className="chip-btn delete-chip-btn"
+                            title="Delete layer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSingleLayer(idx);
+                            }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </aside>
+
+        {/* Sidebar Controls (Sprite manipulation & Animation settings in tabs) */}
+        <aside className="animation-settings" aria-label="Animation controls">
+          {/* Tabs and Export button header */}
+          <div className="settings-panel-header">
+            <div className="settings-tab-nav" role="tablist" aria-label="Settings categories">
+              <button
+                type="button"
+                role="tab"
+                id="tab-sprite"
+                aria-selected={settingsTab === 'sprite'}
+                aria-controls="tabpanel-sprite"
+                className={`settings-tab-btn ${settingsTab === 'sprite' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('sprite')}
+              >
+                <Sliders size={13} />
+                <span>Sprite manipulation</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="tab-animation"
+                aria-selected={settingsTab === 'animation'}
+                aria-controls="tabpanel-animation"
+                className={`settings-tab-btn ${settingsTab === 'animation' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('animation')}
+              >
+                <Settings2 size={13} />
+                <span>Animation settings</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tab Panel 1: Sprite Transformation */}
+          {settingsTab === 'sprite' && (
+            <div
+              id="tabpanel-sprite"
+              role="tabpanel"
+              aria-labelledby="tab-sprite"
+              className="sidebar-section sprite-transform-section"
+            >
+              <div className="section-title">
+                <h4>Sprite manipulation</h4>
+                <p>
+                  Editing:{' '}
+                  <strong>
+                    {isMultiSelected
+                      ? `${validSelectedIndices.length} layers selected`
+                      : primaryLayer?.name}
+                  </strong>
+                </p>
+              </div>
+
+              {primaryLayer && (
+                <div className="transform-controls-grid">
+                  {/* Scale Control */}
+                  <div className="control-group">
+                    <div className="control-header">
+                      <label htmlFor="scale-slider">Scale: {primaryLayer.transform.scale}%</label>
+                    </div>
+                    <input
+                      id="scale-slider"
+                      type="range"
+                      min="10"
+                      max="400"
+                      value={primaryLayer.transform.scale}
+                      onPointerDown={() => {
+                        sliderSnapshot.current = frames;
+                      }}
+                      onChange={(e) => {
+                        const newScale = Number(e.target.value);
+                        updateSelectedLayersTransform({ scale: newScale }, false);
+                      }}
+                      onPointerUp={() => {
+                        if (sliderSnapshot.current) {
+                          recordState(sliderSnapshot.current);
+                          sliderSnapshot.current = null;
+                        }
+                      }}
+                    />
+                    <div className="scale-preset-buttons">
+                      {[50, 100, 150, 200].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className={`preset-btn ${primaryLayer.transform.scale === preset ? 'active' : ''}`}
+                          onClick={() => updateSelectedLayersTransform({ scale: preset })}
+                        >
+                          {preset}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Flip Controls */}
+                  <div className="control-group">
+                    <span className="control-label">Flip & orientation</span>
+                    <div className="button-pair">
+                      <button
+                        type="button"
+                        className={`sprite-button toggle-btn ${primaryLayer.transform.flipX ? 'active' : ''}`}
+                        onClick={() => updateSelectedLayersTransform((t) => ({ flipX: !t.flipX }))}
+                      >
+                        <FlipHorizontal2 size={15} />
+                        <span>Flip horizontal</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`sprite-button toggle-btn ${primaryLayer.transform.flipY ? 'active' : ''}`}
+                        onClick={() => updateSelectedLayersTransform((t) => ({ flipY: !t.flipY }))}
+                      >
+                        <FlipVertical2 size={15} />
+                        <span>Flip vertical</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Rotation Control */}
+                  <div className="control-group">
+                    <label htmlFor="rotation-slider">
+                      Rotation: {primaryLayer.transform.rotation || 0}°
+                    </label>
+                    <input
+                      id="rotation-slider"
+                      type="range"
+                      min="0"
+                      max="360"
+                      value={primaryLayer.transform.rotation || 0}
+                      onPointerDown={() => {
+                        sliderSnapshot.current = frames;
+                      }}
+                      onChange={(e) => {
+                        const newRot = Number(e.target.value);
+                        updateSelectedLayersTransform({ rotation: newRot }, false);
+                      }}
+                      onPointerUp={() => {
+                        if (sliderSnapshot.current) {
+                          recordState(sliderSnapshot.current);
+                          sliderSnapshot.current = null;
+                        }
+                      }}
+                    />
+                    <div className="button-pair mt-1">
+                      <button
+                        type="button"
+                        className="sprite-button"
+                        onClick={() =>
+                          updateSelectedLayersTransform((t) => ({
+                            rotation: (t.rotation - 90 + 360) % 360,
+                          }))
+                        }
+                      >
+                        <RotateCcw size={14} /> -90°
+                      </button>
+                      <button
+                        type="button"
+                        className="sprite-button"
+                        onClick={() =>
+                          updateSelectedLayersTransform((t) => ({
+                            rotation: (t.rotation + 90) % 360,
+                          }))
+                        }
+                      >
+                        <RotateCw size={14} /> +90°
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Position Offset Control */}
+                  <div className="control-group">
+                    <span className="control-label">Position offset (X, Y px)</span>
+                    <div className="offset-inputs-row">
+                      <div className="offset-input">
+                        <span>X</span>
+                        <input
+                          type="number"
+                          value={primaryLayer.transform.x || 0}
+                          onChange={(e) =>
+                            updateSelectedLayersTransform({ x: Number(e.target.value) })
+                          }
+                        />
+                      </div>
+                      <div className="offset-input">
+                        <span>Y</span>
+                        <input
+                          type="number"
+                          value={primaryLayer.transform.y || 0}
+                          onChange={(e) =>
+                            updateSelectedLayersTransform({ y: Number(e.target.value) })
+                          }
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="sprite-button mini-btn"
+                        onClick={() => updateSelectedLayersTransform({ x: 0, y: 0 })}
+                      >
+                        Center
+                      </button>
+                    </div>
+
+                    {/* Nudge pad */}
+                    <div className="nudge-pad">
+                      <div className="nudge-row">
+                        <button
+                          type="button"
+                          className="nudge-btn"
+                          title="Nudge up"
+                          onClick={() =>
+                            updateSelectedLayersTransform((t) => ({ y: (t.y || 0) - 2 }))
+                          }
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                      </div>
+                      <div className="nudge-row">
+                        <button
+                          type="button"
+                          className="nudge-btn"
+                          title="Nudge left"
+                          onClick={() =>
+                            updateSelectedLayersTransform((t) => ({ x: (t.x || 0) - 2 }))
+                          }
+                        >
+                          <ArrowLeft size={13} />
+                        </button>
+                        <span className="nudge-center-dot" />
+                        <button
+                          type="button"
+                          className="nudge-btn"
+                          title="Nudge right"
+                          onClick={() =>
+                            updateSelectedLayersTransform((t) => ({ x: (t.x || 0) + 2 }))
+                          }
+                        >
+                          <ArrowRight size={13} />
+                        </button>
+                      </div>
+                      <div className="nudge-row">
+                        <button
+                          type="button"
+                          className="nudge-btn"
+                          title="Nudge down"
+                          onClick={() =>
+                            updateSelectedLayersTransform((t) => ({ y: (t.y || 0) + 2 }))
+                          }
+                        >
+                          <ArrowDown size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Opacity Control */}
+                  <div className="control-group">
+                    <label htmlFor="opacity-slider">
+                      Opacity: {Math.round((primaryLayer.transform.opacity ?? 1) * 100)}%
+                    </label>
+                    <input
+                      id="opacity-slider"
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={Math.round((primaryLayer.transform.opacity ?? 1) * 100)}
+                      onPointerDown={() => {
+                        sliderSnapshot.current = frames;
+                      }}
+                      onChange={(e) => {
+                        const newOpacity = Number(e.target.value) / 100;
+                        updateSelectedLayersTransform({ opacity: newOpacity }, false);
+                      }}
+                      onPointerUp={() => {
+                        if (sliderSnapshot.current) {
+                          recordState(sliderSnapshot.current);
+                          sliderSnapshot.current = null;
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Batch Actions */}
+                  <div className="transform-batch-actions">
+                    <button
+                      type="button"
+                      className="sprite-button w-full"
+                      onClick={() => applyTransformToAllFrames(primaryLayer.transform)}
+                    >
+                      <Copy size={13} /> Apply transform to all frames
+                    </button>
+                    <button
+                      type="button"
+                      className="sprite-button w-full"
+                      onClick={resetSelectedLayersTransform}
+                    >
+                      <RotateCcw size={13} /> Reset layer edits
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab Panel 2: Animation Settings */}
+          {settingsTab === 'animation' && (
+            <div
+              id="tabpanel-animation"
+              role="tabpanel"
+              aria-labelledby="tab-animation"
+              className="sidebar-section animation-config-section"
+            >
+              <div className="section-title">
+                <h4>Animation settings</h4>
+              </div>
+
+              <div className="setting-field">
+                <label htmlFor="anim-name">File name</label>
+                <input
+                  id="anim-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="my-animation"
+                />
+              </div>
+
+              <div className="setting-field">
+                <label htmlFor="anim-fps">Speed · {fps} FPS</label>
+                <input
+                  id="anim-fps"
+                  aria-label="Frames per second"
+                  type="range"
+                  min="1"
+                  max="60"
+                  value={fps}
+                  onChange={(e) => setFps(Number(e.target.value))}
+                />
+              </div>
+
+              <div className="setting-field checkbox-field">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={loop}
+                    onChange={(e) => setLoop(e.target.checked)}
+                  />
+                  Loop animation
+                </label>
+              </div>
+
+              <div className="setting-row">
+                <div className="setting-field">
+                  <label htmlFor="anim-cols">Columns</label>
+                  <input
+                    id="anim-cols"
+                    type="number"
+                    min="1"
+                    max={count}
+                    value={actualColumns}
+                    onChange={(e) => setColumns(Math.max(1, Number(e.target.value)))}
+                  />
+                </div>
+                <div className="setting-field">
+                  <label htmlFor="anim-pad">Padding (px)</label>
+                  <input
+                    id="anim-pad"
+                    type="number"
+                    min="0"
+                    max="64"
+                    value={padding}
+                    onChange={(e) => setPadding(Math.max(0, Number(e.target.value)))}
+                  />
+                </div>
+              </div>
+
+              <div className="setting-field">
+                <label htmlFor="anim-align">Frame alignment</label>
+                <select
+                  id="anim-align"
+                  value={alignment}
+                  onChange={(e) => setAlignment(e.target.value as 'center' | 'bottom')}
+                >
+                  <option value="bottom">Bottom center (walking sprites)</option>
+                  <option value="center">True center (effects, items)</option>
+                </select>
+              </div>
+
+              <p className="alignment-hint">
+                Equal-sized cells keep frames aligned. Sprites keep their current size.
+              </p>
+
+              {layout && (
+                <div className="sheet-dimensions-info">
+                  <span>
+                    Cell: {cellWidth} × {cellHeight} px
+                  </span>
+                  <span>
+                    Sheet: {layout.width} × {layout.height} px · {actualColumns} × {layout.rows}
+                  </span>
+                </div>
+              )}
+
+              {layoutError && <p className="error-text">{layoutError}</p>}
+              {error && <p className="error-text">{error}</p>}
+
+              {progress !== null && (
+                <div className="export-progress">
+                  <progress max={100} value={progress} />
+                  <span>Exporting… {progress}%</span>
+                  <button type="button" className="mini-btn" onClick={cancelExport}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {/* Quick Export Trigger Card inside Animation settings */}
+              <div className="tab-export-trigger">
+                <button
+                  type="button"
+                  className="sprite-button sprite-primary w-full"
+                  onClick={() => setShowExportModal(true)}
+                >
+                  <Download size={15} /> Export animation (PNG, GIF, JSON)…
+                </button>
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* Export Mini-Modal Dialog */}
+        {showExportModal && (
+          <div
+            className="export-modal-backdrop"
+            onClick={() => setShowExportModal(false)}
+            role="presentation"
+          >
+            <div
+              className="export-mini-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="export-modal-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="export-modal-header">
+                <div className="export-modal-title-box">
+                  <Download size={18} className="export-modal-icon" />
+                  <div>
+                    <h3 id="export-modal-title">Export Animation</h3>
+                    <p className="export-modal-subtitle">
+                      {count} frames · {delay}ms delay ({fps} FPS)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="modal-close-btn"
+                  onClick={() => setShowExportModal(false)}
+                  aria-label="Close export dialog"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {layout && (
+                <div className="export-modal-specs">
+                  <span>
+                    Cell:{' '}
+                    <strong>
+                      {cellWidth}×{cellHeight}px
+                    </strong>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    Sheet:{' '}
+                    <strong>
+                      {layout.width}×{layout.height}px
+                    </strong>{' '}
+                    ({actualColumns}×{layout.rows})
+                  </span>
+                </div>
+              )}
+
+              {layoutError && <p className="error-text">{layoutError}</p>}
+              {error && <p className="error-text">{error}</p>}
+
+              {progress !== null && (
+                <div className="export-progress">
+                  <progress max={100} value={progress} />
+                  <span>Exporting… {progress}%</span>
+                  <button type="button" className="mini-btn" onClick={cancelExport}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {/* Format Cards */}
+              <div className="export-options-list">
+                {/* 1. Spritesheet PNG */}
+                <div className="export-format-card">
+                  <div className="format-card-left">
+                    <span className="format-badge png-badge">PNG</span>
+                    <div className="format-info">
+                      <h4>Spritesheet PNG</h4>
+                      <p>Full transparency · Crisp pixel art ({actualColumns} columns)</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="sprite-button sprite-primary"
+                    disabled={!layout || progress !== null}
+                    onClick={() => exportImage('png')}
+                  >
+                    <Download size={14} /> Download spritesheet PNG
+                  </button>
+                </div>
+
+                {/* 2. Animated GIF */}
+                <div className="export-format-card">
+                  <div className="format-card-left">
+                    <span className="format-badge gif-badge">GIF</span>
+                    <div className="format-info">
+                      <h4>Animated GIF</h4>
+                      <p>Looping web animation · 256 colors palette</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="sprite-button"
+                    disabled={!layout || progress !== null}
+                    onClick={() => exportImage('gif')}
+                  >
+                    <Download size={14} /> Download animated GIF
+                  </button>
+                </div>
+
+                {/* 3. Frame Data JSON */}
+                <div className="export-format-card">
+                  <div className="format-card-left">
+                    <span className="format-badge json-badge">JSON</span>
+                    <div className="format-info">
+                      <h4>Frame metadata (JSON)</h4>
+                      <p>Spritesheet offsets, frame durations & layer data</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="sprite-button"
+                    disabled={!layout || progress !== null}
+                    onClick={exportMetadata}
+                  >
+                    <Download size={14} /> Download frame data (JSON)
+                  </button>
+                </div>
+              </div>
+
+              <div className="export-modal-footer">
+                <small>PNG preserves full alpha channels. GIF uses up to 256 colors.</small>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Full width bottom timeline */}
@@ -1791,9 +2139,7 @@ export default function AnimationEditor({
               <div className="frame-tile-meta">
                 <small title={frame.name}>{frame.name}</small>
                 {frame.layers.length > 1 && (
-                  <span className="layer-count-badge">
-                    {frame.layers.length} layers
-                  </span>
+                  <span className="layer-count-badge">{frame.layers.length} layers</span>
                 )}
               </div>
             </button>

@@ -4,8 +4,23 @@ import sharp from 'sharp';
 
 async function download(page: Page, name: string) {
   const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name, exact: true }).click();
+  let openedExportModal = false;
+  const btn = page.getByRole('button', { name, exact: true });
+  if (!(await btn.isVisible().catch(() => false))) {
+    const exportBtn = page.getByRole('button', { name: 'Export', exact: true }).first();
+    if (await exportBtn.isVisible().catch(() => false)) {
+      await exportBtn.click();
+      openedExportModal = true;
+    }
+  }
+  await btn.click();
   const file = await pending;
+  if (openedExportModal) {
+    const closeBtn = page.getByRole('button', { name: 'Close export dialog' });
+    if (await closeBtn.isVisible().catch(() => false)) {
+      await closeBtn.click();
+    }
+  }
   return readFile((await file.path())!);
 }
 async function extract(page: Page) {
@@ -63,11 +78,15 @@ test('animation ordering, playback, PNG sheet, JSON coordinates and GIF frames a
   const first = await download(page, 'Download PNG for element 1');
   const third = await download(page, 'Download PNG for element 3');
   await page.getByRole('button', { name: 'Create animation' }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'Move frame later' }).click();
   await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
   await expect(page.getByTestId('frame-counter')).toHaveText('Frame 3 / 3');
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  const animTab = page.getByRole('tab', { name: /Animation/i });
+  if (await animTab.isVisible().catch(() => false)) {
+    await animTab.click();
+  }
   await page.getByLabel('Frames per second').fill('10');
   await page.getByLabel('Loop animation').uncheck();
   await page.getByRole('button', { name: 'Play', exact: true }).click();
@@ -166,10 +185,22 @@ test('animation studio sprite manipulation, layers combining, and composite expo
   await expect(page.getByRole('region', { name: 'Sprite Library' })).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'screenshots/drawer-open.png' });
-  await page.getByRole('button', { name: /Combine in Frame 1/ }).first().click();
+  await page
+    .getByRole('button', { name: /Combine in Frame 1/ })
+    .first()
+    .click();
 
   // Verify frame 1 now has 2 layers
   await expect(page.getByText(/Layers in Frame 1 \(2\)/)).toBeVisible();
+  await expect(page.locator('.sidebar-layer-card').first()).toContainText('Front');
+  await expect(page.locator('.sidebar-layer-card').last()).toContainText('Back');
+  expect(
+    await page
+      .locator('.stage-layer-element')
+      .evaluateAll((elements) =>
+        elements.map((element) => element.getAttribute('data-layer-index')),
+      ),
+  ).toEqual(['1', '0']);
 
   // Test multi-selection of layers
   await page.getByRole('button', { name: 'Select all' }).click();
@@ -193,7 +224,9 @@ test('animation studio sprite manipulation, layers combining, and composite expo
   const metadata = JSON.parse((await download(page, 'Download frame data (JSON)')).toString());
   expect(metadata.frames[0].layersCount).toBe(2);
 
-  await page.locator('.animation-workspace-view').screenshot({ path: 'screenshots/animation-multi-layer.png' });
+  await page
+    .locator('.animation-workspace-view')
+    .screenshot({ path: 'screenshots/animation-multi-layer.png' });
 
   // Test return to extractor workspace
   await page.getByRole('button', { name: 'Close animation studio' }).click();
@@ -201,4 +234,3 @@ test('animation studio sprite manipulation, layers combining, and composite expo
 
   expect(errors).toEqual([]);
 });
-

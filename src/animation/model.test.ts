@@ -6,6 +6,7 @@ import {
   calculateFrameDimensions,
   createFrameFromItem,
   createLayerFromItem,
+  layersInPaintOrder,
 } from './model';
 
 describe('sprite transformations and sheet layout', () => {
@@ -35,10 +36,28 @@ describe('sprite transformations and sheet layout', () => {
     expect(() => sheetLayout([{ width: 8192, height: 4000 }], 1, 0)).toThrow();
   });
 
+  it('paints inspector layers from back to front so the first row stays on top', () => {
+    expect(layersInPaintOrder(['front', 'middle', 'back'])).toEqual(['back', 'middle', 'front']);
+  });
+
   it('correctly calculates layer transformed bounds and multi-layer frame dimensions', async () => {
     const dummyBlob = new Blob([''], { type: 'image/png' });
-    const itemA = { id: 1, name: 'ship', blob: dummyBlob, url: 'blob:test1', width: 100, height: 100 };
-    const itemB = { id: 2, name: 'fire', blob: dummyBlob, url: 'blob:test2', width: 40, height: 40 };
+    const itemA = {
+      id: 1,
+      name: 'ship',
+      blob: dummyBlob,
+      url: 'blob:test1',
+      width: 100,
+      height: 100,
+    };
+    const itemB = {
+      id: 2,
+      name: 'fire',
+      blob: dummyBlob,
+      url: 'blob:test2',
+      width: 40,
+      height: 40,
+    };
 
     const frame = createFrameFromItem(itemA, 0);
 
@@ -60,4 +79,3 @@ describe('sprite transformations and sheet layout', () => {
     expect(dim2.height).toBe(160);
   });
 });
-
