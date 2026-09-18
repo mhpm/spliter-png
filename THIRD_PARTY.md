@@ -9,6 +9,7 @@ Los pesos se descargan bajo demanda desde Hugging Face; no se incluyen en el rep
 | SlimSAM 77 uniform | [Xenova/slimsam-77-uniform](https://huggingface.co/Xenova/slimsam-77-uniform), `5850ab45f587c112167512ffef949107115e26a0` | Apache-2.0 |
 | Transformers.js | [Hugging Face](https://github.com/huggingface/transformers.js) | Apache-2.0 |
 | ONNX Runtime | [Microsoft](https://github.com/microsoft/onnxruntime) | MIT |
+| gifenc (animated GIF export) | [Matt DesLauriers](https://github.com/mattdesl/gifenc), npm 1.0.3 | MIT |
 
 La conversión ISNet elimina salidas auxiliares y permite dimensiones espaciales dinámicas. Se utiliza a 512 × 512 con normalización RGB de su configuración y normalización min-max del mapa de probabilidades. El archivo fijado es `onnx/model_quantized.onnx`. SlimSAM usa los archivos cuantizados del codificador y decodificador de su repositorio.
 

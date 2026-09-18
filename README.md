@@ -38,6 +38,16 @@ Los nombres se validan sin distinguir mayúsculas y minúsculas, normalizan Unic
 - Transformers.js 4 para segmentación local con modelos ONNX descargados bajo demanda.
 - Vitest para equivalencia y validaciones; Playwright para el recorrido en navegador.
 
+## Sprite workshop
+
+Select sprites by clicking their regions in the source preview or the checkmarks on their cards. The contextual toolbar can resize selected sprites (1–400% of original size, with locked proportions), flip horizontally or vertically, and reset edits. Card previews, individual PNG downloads and ZIP exports all use the edited pixels. Re-extraction resets edits.
+
+**Create animation** opens the selected sprites in a separate studio. Play or scrub the sequence, set FPS and looping, move frames earlier or later, duplicate, remove, reverse, or reset the sequence. Frames use equal-sized cells with center or bottom-center alignment, configurable padding, and configurable sheet columns. Removing a frame does not remove its source sprite. Closing the studio resets its sequence and settings on the next visit.
+
+Export a transparent spritesheet PNG, animated GIF, or JSON containing frame rectangles, sprite offsets, durations and loop settings. GIF export runs in a cancellable worker using gifenc (MIT), loaded with the studio. GIF has binary transparency and a maximum of 256 colors; PNG retains full alpha. GIF timing is rounded to its 10 ms units, and preview/JSON use the same timing.
+
+Limits: 200 frames, sheets up to 8192 px per side / 24 megapixels, and GIFs up to 50 million total frame pixels. All work stays in the browser. Animation projects are temporary and are not saved across reloads.
+
 ## Arquitectura y SOLID
 
 ```text

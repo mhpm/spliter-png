@@ -11,9 +11,18 @@ interface Props {
   disabled: boolean;
   onFile: (file: File) => void;
   onError: (message: string) => void;
+  onToggleSelect: (id: number) => void;
 }
 
-export function SourcePreview({ source, items, selectedIds, disabled, onFile, onError }: Props) {
+export function SourcePreview({
+  source,
+  items,
+  selectedIds,
+  disabled,
+  onFile,
+  onError,
+  onToggleSelect,
+}: Props) {
   const [showBounds, setShowBounds] = useState(true);
   return (
     <section className="source-panel panel">
@@ -42,7 +51,13 @@ export function SourcePreview({ source, items, selectedIds, disabled, onFile, on
               items.map((item, index) => {
                 const isSelected = !selectedIds || selectedIds.has(item.id);
                 return (
-                  <div
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    aria-label={`Toggle source element ${index + 1}`}
+                    aria-pressed={isSelected}
+                    title={`${item.name} · Click to ${isSelected ? 'deselect' : 'select'}`}
+                    onClick={() => onToggleSelect(item.id)}
                     key={item.id}
                     className={`region-bound ${isSelected ? 'is-selected' : 'is-unselected'}`}
                     style={{
@@ -53,7 +68,7 @@ export function SourcePreview({ source, items, selectedIds, disabled, onFile, on
                     }}
                   >
                     <span>{String(index + 1).padStart(2, '0')}</span>
-                  </div>
+                  </button>
                 );
               })}
           </div>
@@ -80,6 +95,12 @@ export function SourcePreview({ source, items, selectedIds, disabled, onFile, on
           </Button>
         )}
       </div>
+      {items.length > 0 && (
+        <p className="source-selection-hint">
+          Click a region to select or deselect a sprite. Selection is shared with the Elements
+          panel.
+        </p>
+      )}
       {!source && (
         <div className="source-guidance">
           <div className="flex items-center gap-2 text-ink">

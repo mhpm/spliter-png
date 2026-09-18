@@ -1,13 +1,17 @@
+import { lazy, Suspense, useState } from 'react';
 import { Button } from 'react-aria-components';
 import { AlertCircle, Check, FileImage, LoaderCircle, ArrowRight, X } from 'lucide-react';
-import type { Services } from '../application/use-splitter';
+import type { Services, ImageItem } from '../application/use-splitter';
 import { useSplitter } from '../application/use-splitter';
 import { UploadZone } from './UploadZone';
 import { SettingsPanel } from './SettingsPanel';
 import { SourcePreview } from './SourcePreview';
 import { ResultsPanel } from './ResultsPanel';
+import { SelectionTools } from './SelectionTools';
+const AnimationEditor = lazy(() => import('../animation/AnimationEditor'));
 
 export function ExtractorWorkspace({ services }: { services: Services }) {
+  const [animationFrames, setAnimationFrames] = useState<ImageItem[] | null>(null);
   const {
     state,
     load,
@@ -21,8 +25,9 @@ export function ExtractorWorkspace({ services }: { services: Services }) {
     setOptions,
     rename,
     reportError,
+    editSelected,
   } = useSplitter(services);
-  const busy = ['loading', 'processing', 'exporting'].includes(state.status);
+  const busy = ['loading', 'processing', 'exporting', 'editing'].includes(state.status);
   const step = state.items.length ? 3 : state.source ? 2 : 1;
   const fileSize = state.source
     ? state.source.file.size < 1024 * 1024
@@ -77,11 +82,13 @@ export function ExtractorWorkspace({ services }: { services: Services }) {
         <div className="processing-banner" role="status" aria-live="polite">
           <LoaderCircle size={18} className="animate-spin" />
           <span>
-            {state.status === 'exporting'
-              ? 'Preparing your ZIP…'
-              : state.status === 'loading'
-                ? 'Reading PNG…'
-                : state.progress.message}
+            {state.status === 'editing'
+              ? 'Updating selected sprites…'
+              : state.status === 'exporting'
+                ? 'Preparing your ZIP…'
+                : state.status === 'loading'
+                  ? 'Reading PNG…'
+                  : state.progress.message}
           </span>
           {state.status === 'processing' && (
             <>
@@ -93,6 +100,23 @@ export function ExtractorWorkspace({ services }: { services: Services }) {
             <X size={13} /> Cancel
           </Button>
         </div>
+      )}
+      <SelectionTools
+        count={state.selectedIds.size}
+        disabled={busy || state.dirty}
+        onEdit={editSelected}
+        onAnimate={() =>
+          setAnimationFrames(state.items.filter((item) => state.selectedIds.has(item.id)))
+        }
+      />
+      {animationFrames && (
+        <Suspense fallback={<p role="status">Opening animation studio…</p>}>
+          <AnimationEditor
+            initialFrames={animationFrames}
+            onClose={() => setAnimationFrames(null)}
+            download={services.download}
+          />
+        </Suspense>
       )}
       <div className="workspace-grid">
         <aside className="sidebar">
@@ -132,6 +156,7 @@ export function ExtractorWorkspace({ services }: { services: Services }) {
           source={state.source}
           items={state.items}
           selectedIds={state.selectedIds}
+          onToggleSelect={toggleSelect}
           onFile={load}
           onError={reportError}
           disabled={busy}

@@ -75,6 +75,7 @@ function ImageCard({
         <button
           type="button"
           className={`card-select-btn ${selected ? 'is-selected' : ''}`}
+          disabled={disabled}
           onClick={(e) => {
             e.stopPropagation();
             onToggleSelect(item.id);
@@ -91,6 +92,7 @@ function ImageCard({
         <button
           type="button"
           className="card-download-btn"
+          disabled={disabled}
           onClick={(e) => {
             e.stopPropagation();
             onDownloadSingle(item.id);

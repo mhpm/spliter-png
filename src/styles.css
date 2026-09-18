@@ -888,7 +888,8 @@
     border: 1.5px solid #06b6d4;
     background: rgba(6, 182, 212, 0.1);
     border-radius: 4px;
-    pointer-events: none;
+    padding: 0;
+    cursor: pointer;
     box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.2);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }

@@ -3,6 +3,8 @@ import type { ArchiveWriter, Extractor } from './ports';
 import { DEFAULT_OPTIONS } from '../domain/model';
 import type { ExtractedImage, ExtractionOptions, Progress } from '../domain/model';
 import { safeStem, normalizedName } from '../domain/names';
+import { DEFAULT_EDIT, nextEdit, type EditCommand, type SpriteEdit } from '../animation/model';
+import { transformSprite } from '../animation/transform';
 
 export interface SourceImage {
   file: File;
@@ -13,6 +15,8 @@ export interface SourceImage {
 export interface ImageItem extends ExtractedImage {
   name: string;
   url: string;
+  original?: { blob: Blob; width: number; height: number };
+  edit?: SpriteEdit;
 }
 export interface Services {
   extractor: Extractor;
@@ -20,7 +24,7 @@ export interface Services {
   inspect: (file: Blob) => Promise<{ width: number; height: number }>;
   download: (blob: Blob, name: string) => void;
 }
-type Status = 'idle' | 'loading' | 'ready' | 'processing' | 'complete' | 'exporting';
+type Status = 'idle' | 'loading' | 'ready' | 'processing' | 'complete' | 'exporting' | 'editing';
 interface State {
   source: SourceImage | null;
   items: ImageItem[];
@@ -52,6 +56,7 @@ type Action =
   | { type: 'progress'; progress: Progress }
   | { type: 'result'; items: ImageItem[]; opaque: boolean }
   | { type: 'rename'; id: number; name: string }
+  | { type: 'edited'; items: ImageItem[] }
   | { type: 'toggleSelect'; id: number }
   | { type: 'selectAll' }
   | { type: 'deselectAll' }
@@ -61,6 +66,8 @@ type Action =
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
+    case 'edited':
+      return { ...state, items: action.items, status: 'complete', downloaded: false };
     case 'source':
       return {
         ...state,
@@ -250,6 +257,50 @@ export function useSplitter(services: Services) {
     }
   }
 
+  async function editSelected(command: EditCommand) {
+    const selected = state.items.filter((item) => state.selectedIds.has(item.id));
+    if (!selected.length) return;
+    const { id } = begin();
+    dispatch({ type: 'status', status: 'editing' });
+    try {
+      const output = new Map<number, ImageItem>();
+      let totalPixels = 0;
+      for (const item of state.items) {
+        const edit = state.selectedIds.has(item.id)
+          ? nextEdit(item.edit ?? DEFAULT_EDIT, command)
+          : (item.edit ?? DEFAULT_EDIT);
+        const original = item.original ?? item;
+        totalPixels +=
+          Math.max(1, Math.round((original.width * edit.scale) / 100)) *
+          Math.max(1, Math.round((original.height * edit.scale) / 100));
+      }
+      if (totalPixels > 24_000_000)
+        throw new Error(
+          'These sprites would exceed 24 megapixels. Select fewer sprites or reduce the scale.',
+        );
+      for (const item of selected) {
+        const original = item.original ?? {
+          blob: item.blob,
+          width: item.width,
+          height: item.height,
+        };
+        const edit = nextEdit(item.edit ?? DEFAULT_EDIT, command);
+        const rendered = command === 'reset' ? original : await transformSprite(original, edit);
+        if (id !== operation.current) return;
+        output.set(item.id, { ...item, ...rendered, original, edit });
+      }
+      const items = state.items.map((item) => {
+        const updated = output.get(item.id);
+        if (!updated) return item;
+        release(item.url);
+        return { ...updated, url: allocate(updated.blob) };
+      });
+      dispatch({ type: 'edited', items });
+    } catch (error) {
+      fail(error, id);
+    }
+  }
+
   function downloadSingle(id: number) {
     const item = state.items.find((item) => item.id === id);
     if (!item) return;
@@ -267,6 +318,7 @@ export function useSplitter(services: Services) {
     load,
     extract,
     exportZip,
+    editSelected,
     downloadSingle,
     cancel,
     toggleSelect: (id: number) => dispatch({ type: 'toggleSelect', id }),
