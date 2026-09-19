@@ -29,6 +29,30 @@ async function extract(page: Page) {
   await page.getByRole('button', { name: 'Extract elements', exact: true }).click();
   await expect(page.getByRole('textbox', { name: /Element \d+ name/ })).toHaveCount(6);
 }
+
+test('Sprite Workshop is available as a standalone tab and accepts PNG frames', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: /Sprite Workshop/ }).click();
+  await expect(page.getByRole('heading', { name: 'Build your sprite animation' })).toBeVisible();
+
+  await page.getByLabel('PNG frame files').setInputFiles([
+    'tests/fixtures/transparent.png',
+    'tests/fixtures/opaque.png',
+  ]);
+  await expect(page.getByRole('heading', { name: 'Animation studio' })).toBeVisible();
+  await expect(page.getByTestId('frame-counter')).toHaveText('Frame 1 / 2');
+  await page.getByLabel('Show onion skin').check();
+  await expect(page.getByLabel('Onion skin opacity')).toBeVisible();
+  await expect(page.locator('.onion-skin-next')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Next frame' }).click();
+  await expect(page.locator('.onion-skin-previous')).toHaveCount(1);
+  await expect(page.locator('.onion-skin-next')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Close animation studio' }).click();
+  await expect(page.getByRole('heading', { name: 'Build your sprite animation' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Frame sequence' })).toBeVisible();
+});
+
 test('source selection, non-destructive resizing and flips update downloaded pixels', async ({
   page,
 }) => {

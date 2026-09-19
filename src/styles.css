@@ -474,16 +474,23 @@
   /* Workspace Tabs */
   .workspace-tabs {
     @apply flex items-center gap-4 px-8;
+    overflow-x: auto;
+    scrollbar-width: none;
     background: rgba(255, 255, 255, 0.78);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid rgba(226, 232, 240, 0.85);
   }
 
+  .workspace-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
   .workspace-tabs [role='tab'] {
     @apply relative flex cursor-pointer items-center gap-2.5 py-3.5 px-4 text-sm font-medium text-muted;
     border-radius: 12px;
     margin: 6px 0;
+    flex: 0 0 auto;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     outline-offset: -2px;
   }
@@ -520,6 +527,279 @@
     padding: 2px 6px;
     border-radius: 6px;
     box-shadow: 0 2px 6px rgba(168, 85, 247, 0.3);
+  }
+
+  /* Sprite Workshop landing state */
+  .sprite-workshop-page {
+    min-height: calc(100vh - 130px);
+  }
+
+  .sprite-workshop-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--color-accent);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.08);
+    white-space: nowrap;
+  }
+
+  .sprite-workshop-stat strong {
+    font-size: 16px;
+    color: var(--color-ink);
+  }
+
+  .sprite-workshop-stat span {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--color-muted);
+  }
+
+  .sprite-workshop-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.8fr);
+    gap: 20px;
+    align-items: stretch;
+  }
+
+  .sprite-workshop-card {
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  }
+
+  .sprite-workshop-upload-card,
+  .sprite-workshop-guide {
+    padding: 24px;
+  }
+
+  .sprite-workshop-card-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .sprite-workshop-card-heading h2,
+  .sprite-workshop-sequence-heading h2 {
+    margin: 0;
+    color: var(--color-ink);
+    font-size: 16px;
+    font-weight: 750;
+    letter-spacing: -0.2px;
+  }
+
+  .sprite-workshop-card-heading p {
+    margin: 4px 0 0;
+    color: var(--color-muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .sprite-workshop-card-icon {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    color: #ffffff;
+    background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+    box-shadow: 0 6px 14px rgba(6, 182, 212, 0.2);
+  }
+
+  .sprite-workshop-card-icon.accent {
+    color: #4f46e5;
+    background: #eef2ff;
+    box-shadow: none;
+  }
+
+  .sprite-frame-upload {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 116px;
+    padding: 18px 20px;
+    border: 1.5px dashed #a5b4fc;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(238, 242, 255, 0.82), rgba(236, 254, 255, 0.7));
+    color: var(--color-ink);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+
+  .sprite-frame-upload:hover,
+  .sprite-frame-upload.drag-active {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    transform: translateY(-1px);
+  }
+
+  .sprite-frame-upload-icon {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 13px;
+    color: #4f46e5;
+    background: #ffffff;
+    box-shadow: 0 5px 12px rgba(79, 70, 229, 0.12);
+  }
+
+  .sprite-frame-upload-copy {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sprite-frame-upload-copy strong {
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  .sprite-frame-upload-copy small {
+    color: var(--color-muted);
+    font-size: 11px;
+  }
+
+  .sprite-frame-upload-action {
+    padding: 8px 12px;
+    border: 1px solid #c7d2fe;
+    border-radius: 8px;
+    color: #4338ca;
+    background: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .sprite-workshop-tip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 15px;
+    color: #047857;
+    font-size: 11px;
+  }
+
+  .sprite-workshop-guide ul {
+    display: grid;
+    gap: 13px;
+    margin: 22px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sprite-workshop-guide li {
+    position: relative;
+    padding-left: 18px;
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .sprite-workshop-guide li::before {
+    position: absolute;
+    top: 0.45em;
+    left: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #06b6d4, #6366f1);
+    content: '';
+  }
+
+  .sprite-workshop-sequence {
+    margin-top: 20px;
+    padding: 24px;
+  }
+
+  .sprite-workshop-sequence-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .sprite-frame-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+    gap: 12px;
+  }
+
+  .sprite-frame-preview {
+    min-width: 0;
+    padding: 9px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #ffffff;
+  }
+
+  .sprite-frame-preview-image {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 82px;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+
+  .sprite-frame-preview-image img {
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+
+  .sprite-frame-preview-image span {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    min-width: 18px;
+    padding: 1px 4px;
+    border-radius: 5px;
+    color: #ffffff;
+    background: rgba(79, 70, 229, 0.9);
+    font-size: 9px;
+    font-weight: 750;
+    text-align: center;
+  }
+
+  .sprite-frame-preview p {
+    overflow: hidden;
+    margin: 7px 0 2px;
+    color: var(--color-ink);
+    font-size: 11px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sprite-frame-preview small {
+    color: var(--color-muted);
+    font-size: 10px;
+  }
+
+  .notice-dismiss {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 4px 8px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    color: inherit;
+    background: transparent;
+    font-size: 11px;
+    font-weight: 700;
   }
 
   .react-aria-TabPanel[data-inert],
@@ -1414,6 +1694,30 @@
     align-items: flex-start;
     gap: 16px;
     margin-bottom: 20px;
+  }
+  .sprite-workshop-grid {
+    grid-template-columns: 1fr;
+  }
+  .sprite-workshop-stat {
+    align-self: stretch;
+  }
+  .sprite-frame-upload {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .sprite-frame-upload-copy {
+    flex-basis: calc(100% - 64px);
+  }
+  .sprite-frame-upload-action {
+    margin-left: 62px;
+  }
+  .sprite-workshop-sequence-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .sprite-workshop-sequence-heading .sprite-button {
+    width: 100%;
+    justify-content: center;
   }
   .workspace-grid {
     display: flex;

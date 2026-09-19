@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Heading } from 'react-aria-components';
 import {
   ArrowDown,
@@ -64,6 +64,55 @@ interface Props {
   download: (blob: Blob, name: string) => void;
 }
 
+type OnionSkinDirection = 'previous' | 'next';
+
+interface OnionSkinFrameProps {
+  frame: StudioFrame;
+  direction: OnionSkinDirection;
+  opacity: number;
+}
+
+const OnionSkinFrame = memo(function OnionSkinFrame({
+  frame,
+  direction,
+  opacity,
+}: OnionSkinFrameProps) {
+  const paintLayers = useMemo(
+    () => layersInPaintOrder(frame.layers.map((layer, index) => ({ layer, index }))),
+    [frame],
+  );
+
+  return (
+    <div
+      className={`onion-skin-frame onion-skin-${direction}`}
+      style={{ opacity: opacity / 100 }}
+      aria-hidden="true"
+    >
+      {paintLayers.map(({ layer }) => {
+        if (!layer.transform.visible) return null;
+        const { width, height } = getLayerDisplaySize(layer);
+        const flipX = layer.transform.flipX ? -1 : 1;
+        const flipY = layer.transform.flipY ? -1 : 1;
+
+        return (
+          <div
+            key={layer.id}
+            className="onion-skin-layer"
+            style={{
+              width: `${width}px`,
+              height: `${height}px`,
+              transform: `translate(-50%, -50%) translate(${layer.transform.x || 0}px, ${layer.transform.y || 0}px) rotate(${layer.transform.rotation || 0}deg) scale(${flipX}, ${flipY})`,
+              opacity: layer.transform.opacity ?? 1,
+            }}
+          >
+            <img src={layer.url} alt="" draggable={false} />
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
 export default function AnimationEditor({
   initialFrames,
   availableSprites = [],
@@ -98,6 +147,8 @@ export default function AnimationEditor({
   const [settingsTab, setSettingsTab] = useState<'sprite' | 'animation'>('sprite');
   const [showExportModal, setShowExportModal] = useState(false);
   const [lockAspectRatio, setLockAspectRatio] = useState(true);
+  const [onionSkinEnabled, setOnionSkinEnabled] = useState(false);
+  const [onionSkinOpacity, setOnionSkinOpacity] = useState(24);
 
   // Undo / Redo stacks
   const [undoStack, setUndoStack] = useState<StudioFrame[][]>([]);
@@ -155,6 +206,8 @@ export default function AnimationEditor({
   const count = frames.length;
   const safeActive = Math.min(Math.max(0, active), Math.max(0, count - 1));
   const activeFrame = frames[safeActive] || frames[0];
+  const previousFrame = safeActive > 0 ? frames[safeActive - 1] : undefined;
+  const nextFrame = safeActive < count - 1 ? frames[safeActive + 1] : undefined;
   const activeLayers = useMemo(() => activeFrame?.layers || [], [activeFrame]);
   const activePaintLayers = useMemo(
     () => layersInPaintOrder(activeLayers.map((layer, index) => ({ layer, index }))),
@@ -1400,7 +1453,7 @@ export default function AnimationEditor({
             aria-label="Close animation studio"
           >
             <ArrowLeft size={16} />
-            <span>Back to extracted elements</span>
+            <span>Back to Sprite Workshop</span>
           </button>
           <div className="animation-header-title">
             <span className="eyebrow text-accent">SPRITE WORKSHOP</span>
@@ -1644,6 +1697,16 @@ export default function AnimationEditor({
                   height: `${cellHeight}px`,
                 }}
               >
+                {onionSkinEnabled && previousFrame && (
+                  <OnionSkinFrame
+                    frame={previousFrame}
+                    direction="previous"
+                    opacity={onionSkinOpacity}
+                  />
+                )}
+                {onionSkinEnabled && nextFrame && (
+                  <OnionSkinFrame frame={nextFrame} direction="next" opacity={onionSkinOpacity} />
+                )}
                 {activePaintLayers.map(({ layer, index: idx }) => {
                   if (!layer.transform.visible) return null;
                   const isSelected = validSelectedIndices.includes(idx);
@@ -1897,83 +1960,122 @@ export default function AnimationEditor({
                 </div>
               </div>
 
-              <fieldset
-                disabled={progress !== null}
-                className="frame-actions frame-context-actions"
-                aria-label={`Actions for frame ${safeActive + 1}`}
+              <div
+                className="onion-skin-controls timeline-onion-controls"
+                role="group"
+                aria-label="Onion skin controls"
               >
-                <span className="frame-actions-label">Selected frame</span>
-                <button
-                  type="button"
-                  className="timeline-icon-button"
-                  disabled={safeActive === 0}
-                  aria-label="Move selected frame left"
-                  title="Move frame left"
-                  onClick={() => moveFrame(-1)}
-                >
-                  <ArrowLeft size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="timeline-icon-button"
-                  disabled={safeActive === count - 1}
-                  aria-label="Move selected frame right"
-                  title="Move frame right"
-                  onClick={() => moveFrame(1)}
-                >
-                  <ArrowRight size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="timeline-icon-button"
-                  disabled={count >= 200}
-                  aria-label="Duplicate selected frame"
-                  title="Duplicate frame"
-                  onClick={duplicateActiveFrame}
-                >
-                  <Copy size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="timeline-icon-button danger"
-                  disabled={count <= 1}
-                  aria-label="Delete selected frame"
-                  title="Delete frame"
-                  onClick={removeActiveFrame}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </fieldset>
+                <label className="onion-skin-toggle">
+                  <input
+                    type="checkbox"
+                    checked={onionSkinEnabled}
+                    onChange={(event) => setOnionSkinEnabled(event.target.checked)}
+                    aria-label="Show onion skin"
+                  />
+                  <span>Onion skin</span>
+                </label>
+                {onionSkinEnabled && (
+                  <>
+                    <label className="onion-skin-opacity-control">
+                      <span>Opacity</span>
+                      <input
+                        type="range"
+                        min="10"
+                        max="60"
+                        step="1"
+                        value={onionSkinOpacity}
+                        onChange={(event) => setOnionSkinOpacity(Number(event.target.value))}
+                        aria-label="Onion skin opacity"
+                      />
+                      <output>{onionSkinOpacity}%</output>
+                    </label>
+                    <span className="onion-skin-legend" aria-label="Onion skin colors">
+                      <span className="onion-skin-legend-item previous">Previous</span>
+                      <span className="onion-skin-legend-item next">Next</span>
+                    </span>
+                  </>
+                )}
+              </div>
 
-              <fieldset
-                disabled={progress !== null}
-                className="frame-actions sequence-actions"
-                aria-label="Sequence actions"
-              >
-                <button
-                  type="button"
-                  className="timeline-text-button"
-                  onClick={() => updateFrames([...frames].reverse(), count - 1 - safeActive)}
+              <div className="timeline-actions-row">
+                <fieldset
+                  disabled={progress !== null}
+                  className="frame-actions frame-context-actions"
+                  aria-label={`Actions for frame ${safeActive + 1}`}
                 >
-                  Reverse
-                </button>
-                <button
-                  type="button"
-                  className="timeline-icon-button"
-                  aria-label="Reset frame sequence"
-                  title="Reset sequence"
-                  onClick={resetFrameSequence}
+                  <span className="frame-actions-label">Selected frame</span>
+                  <button
+                    type="button"
+                    className="timeline-icon-button"
+                    disabled={safeActive === 0}
+                    aria-label="Move selected frame left"
+                    title="Move frame left"
+                    onClick={() => moveFrame(-1)}
+                  >
+                    <ArrowLeft size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="timeline-icon-button"
+                    disabled={safeActive === count - 1}
+                    aria-label="Move selected frame right"
+                    title="Move frame right"
+                    onClick={() => moveFrame(1)}
+                  >
+                    <ArrowRight size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="timeline-icon-button"
+                    disabled={count >= 200}
+                    aria-label="Duplicate selected frame"
+                    title="Duplicate frame"
+                    onClick={duplicateActiveFrame}
+                  >
+                    <Copy size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="timeline-icon-button danger"
+                    disabled={count <= 1}
+                    aria-label="Delete selected frame"
+                    title="Delete frame"
+                    onClick={removeActiveFrame}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </fieldset>
+
+                <fieldset
+                  disabled={progress !== null}
+                  className="frame-actions sequence-actions"
+                  aria-label="Sequence actions"
                 >
-                  <RotateCcw size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="timeline-text-button btn-timeline-add"
-                  onClick={() => setShowLibrary(true)}
-                >
-                  <Plus size={14} /> Add frame
-                </button>
-              </fieldset>
+                  <button
+                    type="button"
+                    className="timeline-text-button"
+                    onClick={() => updateFrames([...frames].reverse(), count - 1 - safeActive)}
+                  >
+                    Reverse
+                  </button>
+                  <button
+                    type="button"
+                    className="timeline-icon-button"
+                    aria-label="Reset frame sequence"
+                    title="Reset sequence"
+                    onClick={resetFrameSequence}
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="timeline-text-button btn-timeline-add"
+                    onClick={() => setShowLibrary(true)}
+                  >
+                    <Plus size={14} /> Add frame
+                  </button>
+                </fieldset>
+              </div>
             </div>
 
             <div

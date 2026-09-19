@@ -281,6 +281,102 @@ fieldset:disabled .sprite-button {
   color: #64748b;
 }
 
+/* Onion skinning */
+.onion-skin-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-left: 10px;
+  padding: 5px 8px;
+  border: 1px solid #dfe3ed;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 10px;
+}
+
+.timeline-onion-controls {
+  margin-left: 0;
+  flex: 0 1 auto;
+}
+
+.onion-skin-toggle,
+.onion-skin-opacity-control,
+.onion-skin-legend,
+.onion-skin-legend-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.onion-skin-toggle {
+  gap: 5px;
+  color: #334155;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.onion-skin-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+.onion-skin-opacity-control {
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.onion-skin-opacity-control input {
+  width: 72px;
+  accent-color: #6366f1;
+}
+
+.onion-skin-opacity-control output {
+  min-width: 28px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.onion-skin-legend {
+  gap: 7px;
+  border-left: 1px solid #e2e8f0;
+  padding-left: 8px;
+}
+
+.onion-skin-legend-item {
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.onion-skin-legend-item::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  content: '';
+}
+
+.onion-skin-legend-item.previous {
+  color: #0e7490;
+}
+
+.onion-skin-legend-item.previous::before {
+  background: #06b6d4;
+}
+
+.onion-skin-legend-item.next {
+  color: #be185d;
+}
+
+.onion-skin-legend-item.next::before {
+  background: #ec4899;
+}
+
 /* Quick transform bar */
 .quick-transform-bar {
   display: flex;
@@ -402,6 +498,35 @@ fieldset:disabled .sprite-button {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.onion-skin-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+.onion-skin-frame.onion-skin-previous {
+  filter: sepia(1) saturate(5) hue-rotate(145deg) brightness(1.08);
+  mix-blend-mode: multiply;
+}
+.onion-skin-frame.onion-skin-next {
+  filter: sepia(1) saturate(5) hue-rotate(285deg) brightness(1.08);
+  mix-blend-mode: multiply;
+}
+.onion-skin-layer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center center;
+  pointer-events: none;
+}
+.onion-skin-layer img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 .stage-layer-element {
   position: absolute;
@@ -2083,13 +2208,14 @@ fieldset:disabled .sprite-button {
   gap: 8px;
   min-width: 0;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .timeline-title {
   display: flex;
   align-items: center;
-  min-width: 112px;
-  margin-right: auto;
+  flex: 1 1 220px;
+  min-width: 180px;
 }
 
 .timeline-title h3 {
@@ -2114,6 +2240,18 @@ fieldset:disabled .sprite-button {
   color: #94a3b8;
   font-size: 8.5px;
   line-height: 1.2;
+}
+
+.timeline-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 1 1 100%;
+  min-width: 0;
+  margin-top: 3px;
+  padding-top: 9px;
+  border-top: 1px solid #f1f5f9;
 }
 
 .frame-actions {
@@ -2482,17 +2620,20 @@ fieldset:disabled .timeline-text-button {
   }
   .timeline-title {
     flex: 1 1 auto;
+    min-width: 150px;
   }
-  .frame-context-actions {
-    order: 3;
-    flex: 1 1 100%;
-    justify-content: center;
+  .timeline-actions-row {
+    order: 4;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 6px;
   }
   .frame-actions-label {
     margin-right: auto;
   }
-  .sequence-actions {
-    margin-left: auto;
+  .timeline-actions-row .frame-context-actions,
+  .timeline-actions-row .sequence-actions {
+    flex: 0 1 auto;
   }
   .animation-preview-panel,
   .animation-layers-sidebar,
@@ -2502,6 +2643,24 @@ fieldset:disabled .timeline-text-button {
   .animation-stage {
     height: 300px;
     min-height: 250px;
+  }
+  .onion-skin-controls {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .timeline-onion-controls {
+    order: 3;
+    flex: 1 1 100%;
+  }
+  .timeline-toolbar .frame-context-actions {
+    order: 4;
+  }
+  .timeline-toolbar .sequence-actions {
+    order: 5;
+  }
+  .onion-skin-legend {
+    margin-left: auto;
   }
   .quick-transform-bar {
     padding: 6px;
