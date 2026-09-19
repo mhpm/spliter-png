@@ -1,3 +1,4 @@
+import { track } from '@vercel/analytics';
 import { useEffect, useRef, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
@@ -101,6 +102,7 @@ export default function BackgroundEditor() {
   }
   async function removeBackground(withPoints: boolean) {
     if (await editor.segment(withPoints)) {
+      track('background_removed', { mode: withPoints ? 'guided' : 'automatic' });
       setTool('erase');
       setPanel('brush');
       setOriginal(false);
@@ -234,7 +236,10 @@ export default function BackgroundEditor() {
         <button
           className="studio-download"
           disabled={disabled || !!nameError(editor.name)}
-          onClick={() => void editor.download()}
+          onClick={() => {
+            track('background_png_downloaded');
+            void editor.download();
+          }}
         >
           <ArrowDownToLine size={17} />
           <span>Download PNG</span>
