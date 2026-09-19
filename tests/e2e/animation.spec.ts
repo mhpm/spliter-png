@@ -152,6 +152,12 @@ test('animation tools fit mobile and close returns to selected sprites', async (
   await extract(page);
   await page.getByRole('button', { name: 'Create animation' }).click();
   await expect(page.getByRole('heading', { name: 'Animation studio' })).toBeVisible();
+  await page.getByRole('button', { name: 'Spritesheet', exact: true }).click();
+  await expect(page.locator('.spritesheet-preview-grid')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Preview sheet frame 1' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Preview sheet frame 2' })).toBeVisible();
+  await expect(page.locator('.preview-sheet-frame')).toHaveCount(6);
+  await page.getByRole('button', { name: 'Animation', exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const dialog = page.getByRole('dialog');
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -324,6 +330,12 @@ test('animation studio sprite manipulation, layers combining, and composite expo
   await widthInput.fill(String(Math.round(initialWidth * 1.5)));
   await widthInput.press('Enter');
   await expect(widthInput).toHaveValue(String(Math.round(initialWidth * 1.5)));
+  const scaleSlider = page.getByLabel('Scale percentage');
+  await scaleSlider.fill('150');
+  await expect(page.getByText('Scale: 150%')).toBeVisible();
+  const rotationSlider = page.getByLabel('Rotation slider');
+  await rotationSlider.fill('45');
+  await expect(page.getByLabel('Rotation in degrees')).toHaveValue('45');
 
   // Test combining another sprite from extracted library into frame 1
   await page.getByRole('button', { name: 'Combine another sprite' }).click();

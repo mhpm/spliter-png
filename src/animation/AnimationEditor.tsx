@@ -165,6 +165,9 @@ export default function AnimationEditor({
   const primaryLayerIndex = validSelectedIndices[0] ?? 0;
   const primaryLayer = activeLayers[primaryLayerIndex] || activeLayers[0];
   const primaryLayerSize = primaryLayer ? getLayerDisplaySize(primaryLayer) : null;
+  const primaryScale = primaryLayer
+    ? Math.round((primaryLayer.transform.scaleX + primaryLayer.transform.scaleY) / 2)
+    : 100;
   const selectedLayers = useMemo(
     () => validSelectedIndices.map((i) => activeLayers[i]).filter(Boolean),
     [validSelectedIndices, activeLayers],
@@ -1496,6 +1499,10 @@ export default function AnimationEditor({
                 className="spritesheet-preview-grid"
                 style={{
                   gridTemplateColumns: `repeat(${actualColumns}, minmax(0, 1fr))`,
+                  gridTemplateRows: layout
+                    ? `repeat(${layout.rows}, minmax(0, 1fr))`
+                    : undefined,
+                  aspectRatio: layout ? `${layout.width}/${layout.height}` : undefined,
                 }}
               >
                 {frames.map((f, i) => (
@@ -1503,7 +1510,6 @@ export default function AnimationEditor({
                     key={f.id}
                     type="button"
                     className={`preview-sheet-frame ${i === safeActive ? 'active' : ''}`}
-                    style={{ aspectRatio: `${cellWidth}/${cellHeight}` }}
                     aria-label={`Preview sheet frame ${i + 1}`}
                     onClick={() => {
                       setActive(i);
@@ -1525,11 +1531,11 @@ export default function AnimationEditor({
                             key={layer.id || idx}
                             style={{
                               position: 'absolute',
-                              left: '50%',
-                              top: '50%',
+                              left: `${50 + ox}%`,
+                              top: `${50 + oy}%`,
                               width: `${w}%`,
                               height: `${h}%`,
-                              transform: `translate(-50%, -50%) translate(${ox}%, ${oy}%) rotate(${layer.transform.rotation || 0}deg) scale(${fx}, ${fy})`,
+                              transform: `translate(-50%, -50%) rotate(${layer.transform.rotation || 0}deg) scale(${fx}, ${fy})`,
                               opacity: layer.transform.opacity ?? 1,
                             }}
                           >
@@ -2033,10 +2039,73 @@ export default function AnimationEditor({
 
               {primaryLayer && (
                 <div className="transform-controls-grid">
+                  {/* Uniform Scale Control */}
+                  <div className="control-group">
+                    <label htmlFor="inspector-scale-slider">Scale: {primaryScale}%</label>
+                    <input
+                      id="inspector-scale-slider"
+                      type="range"
+                      min={MIN_LAYER_SCALE}
+                      max={MAX_LAYER_SCALE}
+                      value={primaryScale}
+                      onPointerDown={() => {
+                        sliderSnapshot.current = frames;
+                      }}
+                      onChange={(event) => {
+                        const nextScale = Number(event.target.value);
+                        updateSelectedLayersTransform(
+                          { scaleX: nextScale, scaleY: nextScale },
+                          false,
+                        );
+                      }}
+                      onPointerUp={() => {
+                        if (sliderSnapshot.current) recordState(sliderSnapshot.current);
+                        sliderSnapshot.current = null;
+                      }}
+                      onBlur={() => {
+                        if (sliderSnapshot.current) recordState(sliderSnapshot.current);
+                        sliderSnapshot.current = null;
+                      }}
+                      aria-label="Scale percentage"
+                    />
+                  </div>
+
                   {/* Precise rotation and pivot controls */}
                   <div className="control-group">
-                    <label htmlFor="rotation-value">Precise rotation</label>
+                    <label htmlFor="rotation-slider">
+                      Rotation: {primaryLayer.transform.rotation || 0}°
+                    </label>
+                    <input
+                      id="rotation-slider"
+                      type="range"
+                      min="0"
+                      max="359"
+                      value={primaryLayer.transform.rotation || 0}
+                      onPointerDown={() => {
+                        sliderSnapshot.current = frames;
+                      }}
+                      onChange={(event) => {
+                        const newRotation = Number(event.target.value);
+                        updateSelectedLayersTransform(
+                          (transform, layer) =>
+                            rotateLayerAroundPivot({ ...layer, transform }, newRotation),
+                          false,
+                        );
+                      }}
+                      onPointerUp={() => {
+                        if (sliderSnapshot.current) recordState(sliderSnapshot.current);
+                        sliderSnapshot.current = null;
+                      }}
+                      onBlur={() => {
+                        if (sliderSnapshot.current) recordState(sliderSnapshot.current);
+                        sliderSnapshot.current = null;
+                      }}
+                      aria-label="Rotation slider"
+                    />
                     <div className="precise-value-input">
+                      <label className="sr-only" htmlFor="rotation-value">
+                        Precise rotation
+                      </label>
                       <input
                         id="rotation-value"
                         aria-label="Rotation in degrees"
