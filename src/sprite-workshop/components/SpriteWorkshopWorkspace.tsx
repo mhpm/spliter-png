@@ -1,3 +1,4 @@
+import { track } from '@vercel/analytics';
 import { lazy, Suspense, useState } from 'react';
 import { ArrowRight, Check, Film, LoaderCircle, Sparkles } from 'lucide-react';
 import type { ImageItem, Services } from '../../application/use-splitter';
@@ -38,6 +39,7 @@ export default function SpriteWorkshopWorkspace({ services, seed, onExitToExtrac
   async function handleFiles(files: File[]) {
     const loaded = await loadFiles(files);
     if (!loaded) return;
+    track('animation_frames_uploaded', { frame_count: files.length });
     setReturnToExtractor(false);
     setEditorKey((current) => `manual-${current}`);
     setStudioOpen(true);
