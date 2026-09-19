@@ -368,6 +368,16 @@ test('animation studio sprite manipulation, layers combining, and composite expo
   const scaleSlider = page.getByLabel('Scale percentage');
   await scaleSlider.fill('150');
   await expect(page.getByText('Scale: 150%')).toBeVisible();
+  await page.getByRole('button', { name: 'Set scale to 200%' }).click();
+  await expect(scaleSlider).toHaveValue('200');
+  const preciseScale = page.getByLabel('Precise scale value');
+  await preciseScale.fill('175');
+  await preciseScale.press('Enter');
+  await expect(scaleSlider).toHaveValue('175');
+  const preciseOpacity = page.getByLabel('Precise opacity value');
+  await preciseOpacity.fill('35');
+  await preciseOpacity.press('Enter');
+  await expect(page.getByLabel('Opacity slider')).toHaveValue('35');
   const rotationSlider = page.getByLabel('Rotation slider');
   await rotationSlider.fill('45');
   await expect(page.getByLabel('Rotation in degrees')).toHaveValue('45');

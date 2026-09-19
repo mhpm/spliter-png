@@ -2328,6 +2328,59 @@ export default function AnimationEditor({
                       }}
                       aria-label="Scale percentage"
                     />
+                    <div className="scale-shortcuts" aria-label="Scale shortcuts">
+                      {[50, 100, 150, 200].map((scale) => (
+                        <button
+                          key={scale}
+                          type="button"
+                          className={`sprite-button mini-btn ${primaryScale === scale ? 'active' : ''}`}
+                          aria-label={`Set scale to ${scale}%`}
+                          aria-pressed={primaryScale === scale}
+                          onClick={() =>
+                            updateSelectedLayersTransform({ scaleX: scale, scaleY: scale })
+                          }
+                        >
+                          {scale}%
+                        </button>
+                      ))}
+                    </div>
+                    <div className="precise-value-input">
+                      <label className="sr-only" htmlFor="scale-value">
+                        Precise scale value
+                      </label>
+                      <input
+                        id="scale-value"
+                        aria-label="Precise scale value"
+                        type="number"
+                        min={MIN_LAYER_SCALE}
+                        max={MAX_LAYER_SCALE}
+                        step="1"
+                        value={primaryScale}
+                        onFocus={() => {
+                          sliderSnapshot.current = frames;
+                        }}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (!Number.isFinite(value)) return;
+                          const nextScale = Math.min(
+                            MAX_LAYER_SCALE,
+                            Math.max(MIN_LAYER_SCALE, value),
+                          );
+                          updateSelectedLayersTransform(
+                            { scaleX: nextScale, scaleY: nextScale },
+                            false,
+                          );
+                        }}
+                        onBlur={() => {
+                          if (sliderSnapshot.current) recordState(sliderSnapshot.current);
+                          sliderSnapshot.current = null;
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') event.currentTarget.blur();
+                        }}
+                      />
+                      <span>%</span>
+                    </div>
                   </div>
 
                   {/* Precise rotation and pivot controls */}
@@ -2509,6 +2562,7 @@ export default function AnimationEditor({
                       min="0"
                       max="100"
                       value={Math.round((primaryLayer.transform.opacity ?? 1) * 100)}
+                      aria-label="Opacity slider"
                       onPointerDown={() => {
                         sliderSnapshot.current = frames;
                       }}
@@ -2522,7 +2576,44 @@ export default function AnimationEditor({
                           sliderSnapshot.current = null;
                         }
                       }}
+                      onBlur={() => {
+                        if (sliderSnapshot.current) {
+                          recordState(sliderSnapshot.current);
+                          sliderSnapshot.current = null;
+                        }
+                      }}
                     />
+                    <div className="precise-value-input">
+                      <label className="sr-only" htmlFor="opacity-value">
+                        Precise opacity value
+                      </label>
+                      <input
+                        id="opacity-value"
+                        aria-label="Precise opacity value"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={Math.round((primaryLayer.transform.opacity ?? 1) * 100)}
+                        onFocus={() => {
+                          sliderSnapshot.current = frames;
+                        }}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (!Number.isFinite(value)) return;
+                          const nextOpacity = Math.min(100, Math.max(0, value)) / 100;
+                          updateSelectedLayersTransform({ opacity: nextOpacity }, false);
+                        }}
+                        onBlur={() => {
+                          if (sliderSnapshot.current) recordState(sliderSnapshot.current);
+                          sliderSnapshot.current = null;
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') event.currentTarget.blur();
+                        }}
+                      />
+                      <span>%</span>
+                    </div>
                   </div>
 
                   {/* Batch Actions */}
