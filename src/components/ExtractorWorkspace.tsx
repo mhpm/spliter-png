@@ -1,3 +1,4 @@
+import { track } from '@vercel/analytics';
 import { Button } from 'react-aria-components';
 import { AlertCircle, Check, FileImage, LoaderCircle, ArrowRight, X } from 'lucide-react';
 import type { Services, ImageItem } from '../application/use-splitter';
@@ -29,6 +30,23 @@ export function ExtractorWorkspace({ services, onOpenWorkshop }: Props) {
     reportError,
     editSelected,
   } = useSplitter(services);
+  const trackFileLoad = (file: File) => {
+    track('sprite_uploaded', { source: 'extractor', size_kb: Math.round(file.size / 1024) });
+    return load(file);
+  };
+  const trackExtract = () => {
+    track('sprite_extraction_started', { reextract: state.items.length > 0 });
+    return extract();
+  };
+  const trackZipExport = () => {
+    track('frames_zip_downloaded', { frame_count: state.selectedIds.size });
+    return exportZip();
+  };
+  const trackSingleDownload = (id: number) => {
+    track('frame_downloaded');
+    return downloadSingle(id);
+  };
+
   const busy = ['loading', 'processing', 'exporting', 'editing'].includes(state.status);
   const step = state.items.length ? 3 : state.source ? 2 : 1;
   const fileSize = state.source
@@ -107,12 +125,13 @@ export function ExtractorWorkspace({ services, onOpenWorkshop }: Props) {
         count={state.selectedIds.size}
         disabled={busy || state.dirty}
         onEdit={editSelected}
-        onAnimate={() =>
+        onAnimate={() => {
+          track('animation_editor_opened', { frame_count: state.selectedIds.size });
           onOpenWorkshop(
             state.items.filter((item) => state.selectedIds.has(item.id)),
             state.items,
-          )
-        }
+          );
+        }}
       />
       <div className="workspace-grid">
         <aside className="sidebar">
@@ -130,7 +149,7 @@ export function ExtractorWorkspace({ services, onOpenWorkshop }: Props) {
                   </div>
                   <Check size={15} className="ml-auto shrink-0 text-accent" />
                 </div>
-                <UploadZone compact onFile={load} onError={reportError} disabled={busy} />
+                <UploadZone compact onFile={trackFileLoad} onError={reportError} disabled={busy} />
               </>
             ) : (
               <div className="file-placeholder">
@@ -145,7 +164,7 @@ export function ExtractorWorkspace({ services, onOpenWorkshop }: Props) {
             canExtract={!!state.source}
             disabled={busy}
             hasResults={state.status === 'complete' || state.items.length > 0}
-            onExtract={extract}
+            onExtract={trackExtract}
           />
         </aside>
         <SourcePreview
@@ -153,7 +172,7 @@ export function ExtractorWorkspace({ services, onOpenWorkshop }: Props) {
           items={state.items}
           selectedIds={state.selectedIds}
           onToggleSelect={toggleSelect}
-          onFile={load}
+          onFile={trackFileLoad}
           onError={reportError}
           disabled={busy}
         />
@@ -169,8 +188,8 @@ export function ExtractorWorkspace({ services, onOpenWorkshop }: Props) {
           onToggleSelect={toggleSelect}
           onSelectAll={selectAll}
           onDeselectAll={deselectAll}
-          onDownloadSingle={downloadSingle}
-          onExport={exportZip}
+          onDownloadSingle={trackSingleDownload}
+          onExport={trackZipExport}
         />
       </div>
       <footer className="workspace-footer">
