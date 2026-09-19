@@ -1,4 +1,5 @@
 import { StrictMode } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { createRoot } from 'react-dom/client';
 import { I18nProvider } from 'react-aria-components';
 import App from './App';
@@ -19,6 +20,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <I18nProvider locale="es-MX">
       <App services={services} />
+      <Analytics />
     </I18nProvider>
   </StrictMode>,
 );
