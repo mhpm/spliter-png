@@ -90,6 +90,11 @@ export default function AnimationEditor({
   const [draggedLayerIdx, setDraggedLayerIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | null>(null);
+  const [draggedFrameIndex, setDraggedFrameIndex] = useState<number | null>(null);
+  const [frameDropIndex, setFrameDropIndex] = useState<number | null>(null);
+  const [frameDropPosition, setFrameDropPosition] = useState<'before' | 'after' | null>(null);
+  const [frameDropMode, setFrameDropMode] = useState<'reorder' | 'include' | null>(null);
+  const [frameDropTarget, setFrameDropTarget] = useState<'stage' | 'layers' | null>(null);
   const [settingsTab, setSettingsTab] = useState<'sprite' | 'animation'>('sprite');
   const [showExportModal, setShowExportModal] = useState(false);
   const [lockAspectRatio, setLockAspectRatio] = useState(true);
@@ -108,6 +113,8 @@ export default function AnimationEditor({
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const frameStripRef = useRef<HTMLDivElement | null>(null);
+  const frameDragMovedRef = useRef(false);
+  const layerDragPayloadRef = useRef<{ frameIndex: number; layerIndex: number } | null>(null);
   const marqueeRef = useRef<{
     startX: number;
     startY: number;
@@ -386,17 +393,7 @@ export default function AnimationEditor({
   }
 
   function addLayerToActiveFrame(item: ImageItem) {
-    recordState(frames);
-    setFrames((prev) => {
-      const next = [...prev];
-      const targetFrame = { ...next[safeActive] };
-      const newLayer = createLayerFromItem(item);
-      targetFrame.layers = [...targetFrame.layers, newLayer];
-      next[safeActive] = targetFrame;
-      return next;
-    });
-    setSelectedLayerIndices([activeLayers.length]);
-    setShowLibrary(false);
+    addLayerToFrame(item, safeActive);
   }
 
   function removeSelectedLayers() {
@@ -455,9 +452,16 @@ export default function AnimationEditor({
   }
 
   function handleLayerDragStart(e: React.DragEvent, idx: number) {
+    layerDragPayloadRef.current = { frameIndex: safeActive, layerIndex: idx };
     setDraggedLayerIdx(idx);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(idx));
+    // A layer can be reordered in the sidebar (move) or copied into another
+    // frame (copy), so expose both operations to the browser drag contract.
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData(
+      'application/x-splitter-layer',
+      JSON.stringify({ frameIndex: safeActive, layerIndex: idx }),
+    );
+    e.dataTransfer.setData('text/plain', `layer:${safeActive}:${idx}`);
     if (!validSelectedIndices.includes(idx)) {
       setSelectedLayerIndices([idx]);
     }
@@ -505,9 +509,244 @@ export default function AnimationEditor({
   }
 
   function handleLayerDragEnd() {
+    layerDragPayloadRef.current = null;
     setDraggedLayerIdx(null);
     setDragOverIdx(null);
     setDropPosition(null);
+  }
+
+  function clearFrameDragState() {
+    layerDragPayloadRef.current = null;
+    setDraggedFrameIndex(null);
+    setFrameDropIndex(null);
+    setFrameDropPosition(null);
+    setFrameDropMode(null);
+    setFrameDropTarget(null);
+  }
+
+  function handleFrameDragStart(e: React.DragEvent, frameIndex: number) {
+    frameDragMovedRef.current = true;
+    layerDragPayloadRef.current = null;
+    setDraggedLayerIdx(null);
+    setDraggedFrameIndex(frameIndex);
+    setFrameDropMode('reorder');
+    // A frame is reordered in the timeline, or copied as a new layer when it
+    // is dropped on the active frame's preview/layers column.
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData('application/x-splitter-frame', String(frameIndex));
+    e.dataTransfer.setData('text/plain', `frame:${frameIndex}`);
+  }
+
+  function getDraggedFrameIndex(e: React.DragEvent): number | null {
+    const frameData = e.dataTransfer.getData('application/x-splitter-frame');
+    const plainData = e.dataTransfer.getData('text/plain');
+    const value = frameData || (plainData.startsWith('frame:') ? plainData.slice(6) : '');
+    const parsedIndex = value.trim() ? Number(value) : null;
+    return parsedIndex !== null && Number.isInteger(parsedIndex) && parsedIndex >= 0 && parsedIndex < frames.length
+      ? parsedIndex
+      : draggedFrameIndex;
+  }
+
+  function isFrameDrag(e: React.DragEvent) {
+    return (
+      e.dataTransfer.types.includes('application/x-splitter-frame') ||
+      (draggedFrameIndex !== null &&
+        !e.dataTransfer.types.includes('application/x-splitter-layer') &&
+        !e.dataTransfer.types.includes('application/x-splitter-sprite'))
+    );
+  }
+
+  function handleFrameSurfaceDragOver(e: React.DragEvent, target: 'stage' | 'layers') {
+    if (!isFrameDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    setFrameDropTarget(target);
+  }
+
+  function handleFrameSurfaceDragLeave(e: React.DragEvent, target: 'stage' | 'layers') {
+    const related = e.relatedTarget as Node | null;
+    if (!related || !e.currentTarget.contains(related)) {
+      setFrameDropTarget((current) => (current === target ? null : current));
+    }
+  }
+
+  async function includeFrameAsLayer(sourceFrameIndex: number, targetFrameIndex: number) {
+    if (sourceFrameIndex === targetFrameIndex) {
+      setError('A frame cannot be included inside itself.');
+      return;
+    }
+    const source = frames[sourceFrameIndex];
+    const target = frames[targetFrameIndex];
+    if (!source || !target) return;
+
+    try {
+      const composed = await compositeFrame(source);
+      const layer = createLayerFromItem(
+        {
+          // Keep the existing layer model compatible with extracted sprites;
+          // the name and pixels identify this as a composed frame layer.
+          id: source.layers[0]?.spriteId ?? sourceFrameIndex,
+          name: source.name,
+          blob: composed.blob,
+          url: URL.createObjectURL(composed.blob),
+          width: composed.width,
+          height: composed.height,
+        },
+        { x: 0, y: 0 },
+      );
+      const newLayerIndex = target.layers.length;
+      recordState(frames);
+      setFrames((previous) =>
+        previous.map((frame, index) =>
+          index === targetFrameIndex ? { ...frame, layers: [...frame.layers, layer] } : frame,
+        ),
+      );
+      setPlaying(false);
+      setActive(targetFrameIndex);
+      setSelectedLayerIndices([newLayerIndex]);
+      setView('animation');
+      setError('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not include the frame as a layer.');
+    }
+  }
+
+  async function handleFrameSurfaceDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const sourceFrameIndex = getDraggedFrameIndex(e);
+    if (sourceFrameIndex !== null) {
+      await includeFrameAsLayer(sourceFrameIndex, safeActive);
+    }
+    clearFrameDragState();
+  }
+
+  function handleFrameDragOver(e: React.DragEvent, frameIndex: number) {
+    e.preventDefault();
+    const hasSprite = e.dataTransfer.types.includes('application/x-splitter-sprite');
+    const hasFrame =
+      e.dataTransfer.types.includes('application/x-splitter-frame') ||
+      (draggedFrameIndex !== null && !hasSprite && !e.dataTransfer.types.includes('application/x-splitter-layer'));
+    const hasLayer = !hasFrame && (
+      e.dataTransfer.types.includes('application/x-splitter-layer') ||
+      (e.dataTransfer.types.includes('text/plain') && draggedLayerIdx !== null) ||
+      layerDragPayloadRef.current !== null
+    );
+    if (!hasSprite && !hasLayer && !hasFrame) return;
+    e.dataTransfer.dropEffect = hasFrame ? 'move' : 'copy';
+    setFrameDropIndex(frameIndex);
+    if (!hasFrame && (hasSprite || hasLayer)) {
+      setFrameDropMode('include');
+      setFrameDropPosition(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    setFrameDropMode('reorder');
+    setFrameDropPosition(e.clientX < rect.left + rect.width / 2 ? 'before' : 'after');
+  }
+
+  function addLayerToFrame(item: ImageItem, frameIndex: number) {
+    const target = frames[frameIndex];
+    if (!target) return;
+    recordState(frames);
+    const newLayer = createLayerFromItem(item);
+    setFrames((previous) =>
+      previous.map((frame, index) =>
+        index === frameIndex ? { ...frame, layers: [...frame.layers, newLayer] } : frame,
+      ),
+    );
+    setActive(frameIndex);
+    setSelectedLayerIndices([target.layers.length]);
+    setView('animation');
+    setShowLibrary(false);
+  }
+
+  function copyLayerToFrame(sourceFrameIndex: number, layerIndex: number, targetFrameIndex: number) {
+    const source = frames[sourceFrameIndex]?.layers[layerIndex];
+    const target = frames[targetFrameIndex];
+    if (!source || !target) return;
+    recordState(frames);
+    const clone = createLayerFromItem(
+      {
+        id: source.spriteId,
+        name: source.name,
+        blob: source.blob,
+        url: source.url,
+        width: source.width,
+        height: source.height,
+      },
+      { ...source.transform },
+    );
+    setFrames((previous) =>
+      previous.map((frame, index) =>
+        index === targetFrameIndex ? { ...frame, layers: [...frame.layers, clone] } : frame,
+      ),
+    );
+    setActive(targetFrameIndex);
+    setSelectedLayerIndices([target.layers.length]);
+    setView('animation');
+  }
+
+  function handleFrameDrop(e: React.DragEvent, targetFrameIndex: number) {
+    e.preventDefault();
+    const layerData = e.dataTransfer.getData('application/x-splitter-layer');
+    const frameData = e.dataTransfer.getData('application/x-splitter-frame');
+    const plainData = e.dataTransfer.getData('text/plain');
+    const draggedFrame = frameData || (plainData.startsWith('frame:') ? plainData.slice(6) : '');
+
+    const layerPayload =
+      layerData ||
+      (plainData.startsWith('layer:')
+        ? JSON.stringify(
+            plainData
+              .slice(6)
+              .split(':')
+              .map(Number)
+              .reduce((payload, value, index) => {
+                if (index === 0) payload.frameIndex = value;
+                if (index === 1) payload.layerIndex = value;
+                return payload;
+              }, {} as { frameIndex?: number; layerIndex?: number }),
+          )
+        : '');
+    const fallbackLayerPayload = layerDragPayloadRef.current;
+
+    if (layerPayload || fallbackLayerPayload) {
+      try {
+        const parsed = fallbackLayerPayload ?? (JSON.parse(layerPayload) as { frameIndex: number; layerIndex: number });
+        copyLayerToFrame(parsed.frameIndex, parsed.layerIndex, targetFrameIndex);
+      } catch {
+        // Ignore malformed drag payloads.
+      }
+      clearFrameDragState();
+      return;
+    }
+
+    if (!draggedFrame) {
+      clearFrameDragState();
+      return;
+    }
+
+    const fromIndex = Number(draggedFrame);
+    if (!Number.isInteger(fromIndex) || fromIndex === targetFrameIndex) {
+      clearFrameDragState();
+      return;
+    }
+
+    let insertionIndex = targetFrameIndex + (frameDropPosition === 'after' ? 1 : 0);
+    const next = [...frames];
+    const [moved] = next.splice(fromIndex, 1);
+    if (fromIndex < insertionIndex) insertionIndex -= 1;
+    next.splice(Math.max(0, Math.min(next.length, insertionIndex)), 0, moved);
+    updateFrames(next, Math.max(0, Math.min(next.length - 1, insertionIndex)));
+    clearFrameDragState();
+  }
+
+  function handleFrameDragEnd() {
+    frameDragMovedRef.current = false;
+    clearFrameDragState();
   }
 
   function duplicateSingleLayer(layerIdx: number) {
@@ -1374,11 +1613,14 @@ export default function AnimationEditor({
           {/* Stage */}
           <div
             ref={stageRef}
-            className="animation-stage checkerboard"
+            className={`animation-stage checkerboard ${frameDropTarget === 'stage' ? 'frame-drop-active' : ''}`}
             onPointerDown={handleStagePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            onDragOver={(event) => handleFrameSurfaceDragOver(event, 'stage')}
+            onDragLeave={(event) => handleFrameSurfaceDragLeave(event, 'stage')}
+            onDrop={handleFrameSurfaceDrop}
           >
             {/* Render Marquee Selection Box */}
             {marqueeBox && (
@@ -1649,6 +1891,9 @@ export default function AnimationEditor({
                   <span>
                     Frame {safeActive + 1} of {count} · {delay} ms
                   </span>
+                  <small className="timeline-drop-hint">
+                    Drag frames to reorder · Drop a frame on the preview or layers to include it
+                  </small>
                 </div>
               </div>
 
@@ -1742,8 +1987,17 @@ export default function AnimationEditor({
                   key={frame.id}
                   type="button"
                   data-frame-index={frameIndex}
-                  className={`frame-tile ${frameIndex === safeActive ? 'active' : ''}`}
+                  draggable
+                  className={`frame-tile ${frameIndex === safeActive ? 'active' : ''} ${draggedFrameIndex === frameIndex ? 'is-dragging' : ''} ${frameDropIndex === frameIndex && frameDropMode === 'include' ? 'drop-include' : ''} ${frameDropIndex === frameIndex && frameDropMode === 'reorder' && frameDropPosition ? `drop-${frameDropPosition}` : ''}`}
+                  onDragStart={(event) => handleFrameDragStart(event, frameIndex)}
+                  onDragOver={(event) => handleFrameDragOver(event, frameIndex)}
+                  onDrop={(event) => handleFrameDrop(event, frameIndex)}
+                  onDragEnd={handleFrameDragEnd}
                   onClick={() => {
+                    if (frameDragMovedRef.current) {
+                      frameDragMovedRef.current = false;
+                      return;
+                    }
                     setPlaying(false);
                     setActive(frameIndex);
                     setView('animation');
@@ -1804,6 +2058,7 @@ export default function AnimationEditor({
                   </h4>
                 </div>
               </div>
+              <small className="layers-drop-hint">Drop a frame here to add it as a new layer</small>
 
               <div className="layers-actions-bar">
                 <button
@@ -1850,7 +2105,12 @@ export default function AnimationEditor({
               </div>
             </div>
 
-            <div className="layers-container layers-list-rows">
+            <div
+              className={`layers-container layers-list-rows ${frameDropTarget === 'layers' ? 'frame-drop-active' : ''}`}
+              onDragOver={(event) => handleFrameSurfaceDragOver(event, 'layers')}
+              onDragLeave={(event) => handleFrameSurfaceDragLeave(event, 'layers')}
+              onDrop={handleFrameSurfaceDrop}
+            >
               {activeLayers.map((layer, idx) => {
                 const isSelected = validSelectedIndices.includes(idx);
                 const isDragging = draggedLayerIdx === idx;
@@ -1883,10 +2143,10 @@ export default function AnimationEditor({
                   >
                     <div className="card-top-row">
                       <div className="card-drag-pos">
-                        <span className="layer-drag-handle" title="Arrastrar para reacomodar">
+                        <span className="layer-drag-handle" title="Drag to reorder">
                           <GripVertical size={13} />
                         </span>
-                        <span className="layer-pos-pill" title={`Posición ${idx + 1}`}>
+                        <span className="layer-pos-pill" title={`Layer position ${idx + 1}`}>
                           #{idx + 1}
                         </span>
                       </div>

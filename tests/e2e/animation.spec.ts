@@ -147,6 +147,41 @@ test('animation ordering, playback, PNG sheet, JSON coordinates and GIF frames a
   expect(errors).toEqual([]);
 });
 
+test('frames can be reordered and layers can be dropped into another frame', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await extract(page);
+  await page.getByRole('button', { name: 'Deselect all elements' }).click();
+  for (const i of [1, 2])
+    await page.getByRole('button', { name: `Toggle source element ${i}`, exact: true }).click();
+  await page.getByRole('button', { name: 'Create animation' }).click();
+
+  const frameTiles = page.locator('.frame-tile');
+  await frameTiles.nth(1).dragTo(frameTiles.nth(0), { targetPosition: { x: 4, y: 24 } });
+  await expect(frameTiles.nth(0)).toContainText('sample_002');
+
+  await page.locator('.sidebar-layer-card').first().dragTo(frameTiles.nth(1));
+  await expect(page.getByText(/Layers in Frame 2 \(2\)/)).toBeVisible();
+});
+
+test('frames can be dropped on the preview or layers column to become new layers', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await extract(page);
+  await page.getByRole('button', { name: 'Deselect all elements' }).click();
+  for (const i of [1, 2])
+    await page.getByRole('button', { name: `Toggle source element ${i}`, exact: true }).click();
+  await page.getByRole('button', { name: 'Create animation' }).click();
+
+  const frameTiles = page.locator('.frame-tile');
+  await frameTiles.nth(1).dragTo(page.locator('.animation-stage'));
+  await expect(page.getByText(/Layers in Frame 1 \(2\)/)).toBeVisible();
+
+  await frameTiles.nth(1).click();
+  await frameTiles.nth(0).dragTo(page.locator('.layers-container'));
+  await expect(page.getByText(/Layers in Frame 2 \(2\)/)).toBeVisible();
+});
+
 test('animation tools fit mobile and close returns to selected sprites', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await extract(page);
