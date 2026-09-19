@@ -1,3 +1,4 @@
+import { track } from '@vercel/analytics';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Heading } from 'react-aria-components';
 import {
@@ -1265,6 +1266,7 @@ export default function AnimationEditor({
           setError(data.error);
           cancelExport();
         } else if (data.blob) {
+          track('animation_exported', { format: kind, frame_count: frames.length });
           download(
             data.blob,
             `${safeStem(name || 'my-animation')}${kind === 'png' ? '-sheet' : ''}.${kind}`,
@@ -1354,6 +1356,7 @@ export default function AnimationEditor({
       2,
     );
 
+    track('animation_exported', { format: 'json', frame_count: frames.length });
     download(
       new Blob([json], { type: 'application/json' }),
       `${safeStem(name || 'my-animation')}.json`,
