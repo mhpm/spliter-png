@@ -17,6 +17,7 @@
     "check": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "@huggingface/transformers": "^4.3.0",
     "fflate": "^0.8.2",
     "gifenc": "^1.0.3",
